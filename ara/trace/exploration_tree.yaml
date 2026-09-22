@@ -1,0 +1,107 @@
+tree:
+  - id: N01
+    type: question
+    title: "Complete Zotero bridge native acceptance"
+    provenance: user
+    timestamp: "2026-09-21T17:23+08:00"
+    description: >
+      Continue the unfinished local research assistant work, especially native Zotero
+      plugin loading, synchronization acceptance, documentation, and packaging.
+    children:
+      - id: N02
+        type: dead_end
+        title: "Load an unregistered fixture XPI from the profile"
+        provenance: ai-executed
+        timestamp: "2026-09-21T17:23+08:00"
+        hypothesis: >
+          Zotero would discover or temporarily install an XPI placed in the isolated
+          profile extensions directory.
+        failure_mode: >
+          Startup removed the unregistered XPI, and the extension database remained empty.
+        lesson: >
+          Keep the fixture outside the profile and use the temporary add-on API.
+      - id: N03
+        type: experiment
+        title: "Inspect Zotero manifest validation details"
+        provenance: ai-executed
+        timestamp: "2026-09-21T17:23+08:00"
+        result: >
+          The detailed validation error identified a missing
+          applications.zotero.update_url field.
+        evidence: [C01, E01]
+        children:
+          - id: N04
+            type: experiment
+            title: "Run isolated native synchronization and writeback"
+            provenance: ai-executed
+            timestamp: "2026-09-21T17:23+08:00"
+            result: >
+              The plugin loaded its menu, synchronized one PDF document and one note,
+              and retained exactly one writeback note after two attempts.
+            evidence: [C02, E01]
+      - id: N05
+        type: decision
+        title: "Publish the Zotero plugin in a dedicated GitHub repository"
+        provenance: user
+        timestamp: "2026-09-21T17:30+08:00"
+        choice: >
+          Prepare the plugin source, documentation, and release package for the user's
+          newly created GitHub repository.
+        alternatives:
+          - "Commit the plugin inside the unrelated outer D:/workspace repository"
+        evidence: >
+          The outer Git root contains many unrelated projects, while the plugin can be
+          distributed independently.
+      - id: N06
+        type: decision
+        title: "Keep Python as the research engine and integrate it into Zotero"
+        provenance: user
+        timestamp: "2026-09-21T23:57+08:00"
+        choice: >
+          Preserve the existing Python parsing, storage, retrieval, notes, and backup
+          implementation, while limiting JavaScript to Zotero APIs, UI, process launch,
+          and local HTTP bridging.
+        alternatives:
+          - "Keep the research assistant as a separate browser application"
+          - "Rewrite the existing Python core in JavaScript"
+        evidence: >
+          The user explicitly requested a Zotero-integrated experience and asked to use
+          Python as much as possible.
+        children:
+          - id: N07
+            type: dead_end
+            title: "Open the packaged XHTML directly from the XPI root URI"
+            provenance: ai-executed
+            timestamp: "2026-09-21T23:57+08:00"
+            hypothesis: >
+              The rootURI plus assistant.xhtml would open identically from a source
+              directory and from a packaged XPI.
+            failure_mode: >
+              The packaged rootURI was a jar URI and the dialog remained blank.
+            lesson: >
+              Register a chrome content package for standalone plugin windows.
+          - id: N08
+            type: dead_end
+            title: "Rely on a bundled chrome.manifest without runtime registration"
+            provenance: ai-executed
+            timestamp: "2026-09-21T23:57+08:00"
+            hypothesis: >
+              Including chrome.manifest in the bootstrapped XPI would make the content
+              URL available automatically.
+            failure_mode: >
+              Zotero displayed a problem-loading-page document for the unregistered URL.
+            lesson: >
+              Bootstrapped plugins must register chrome entries through
+              amIAddonManagerStartup and release the registration on shutdown.
+          - id: N09
+            type: experiment
+            title: "Install the final XPI and run full native workbench acceptance"
+            provenance: ai-executed
+            timestamp: "2026-09-21T23:57+08:00"
+            result: >
+              Zotero 9.0.6 activated the final 0.2.0 XPI. A separate packaged fixture
+              rendered the title, all 15 required controls, seven knowledge-base rows,
+              and the active synthetic collection; it synchronized two entities and
+              retained one writeback after two attempts. Node tests passed 11/11 and
+              the Python suite ran 233 tests with 17 skips.
+            evidence: [C03, E02]

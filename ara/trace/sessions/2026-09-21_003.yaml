@@ -1,0 +1,66 @@
+session:
+  id: "2026-09-21_003"
+  timestamp: "2026-09-21T23:57+08:00"
+  summary: "Integrated the Python research engine into a packaged Zotero workbench and completed final acceptance."
+
+events_logged:
+  - type: decision
+    id: N06
+    provenance: user
+    summary: "Keep Python for core research capabilities and use JavaScript only for Zotero integration."
+  - type: dead_end
+    id: N07
+    provenance: ai-executed
+    summary: "Direct jar-root XHTML dialogs were blank in the packaged XPI."
+  - type: dead_end
+    id: N08
+    provenance: ai-executed
+    summary: "A bundled chrome.manifest alone did not register the workbench content URL."
+  - type: experiment
+    id: N09
+    provenance: ai-executed
+    summary: "Final XPI installation and packaged native workbench acceptance passed."
+  - type: claim
+    id: C03
+    provenance: ai-suggested
+    summary: "The packaged 0.2.0 Zotero workbench integrates successfully with the Python backend."
+  - type: heuristic
+    id: H04
+    provenance: ai-suggested
+    summary: "Register chrome content explicitly from a bootstrapped Zotero plugin."
+  - type: heuristic
+    id: H05
+    provenance: ai-suggested
+    summary: "Run XHTML workbench initialization after the body DOM is parsed."
+
+ai_actions:
+  - action: "Implemented the internal Zotero workbench, Python-engine bridge configuration, packaged chrome registration, and stronger native fixtures."
+    provenance: ai-executed
+    files_changed:
+      - "deployment/zotero/bootstrap.js"
+      - "deployment/zotero/bridge.js"
+      - "deployment/zotero/assistant.xhtml"
+      - "deployment/zotero/assistant.css"
+      - "deployment/zotero/assistant.js"
+      - "benchmarks/prepare_zotero_fixture.py"
+      - "benchmarks/pack_zotero_fixture.py"
+      - "benchmarks/install_zotero_fixture.py"
+      - "benchmarks/zotero_native_fixture.js"
+  - action: "Built and validated the final 0.2.0 XPI and updated release and troubleshooting documentation."
+    provenance: ai-executed
+    files_changed:
+      - "deployment/zotero/README.md"
+      - "问题排查笔记.md"
+
+claims_touched:
+  - id: C03
+    action: created
+    provenance: ai-suggested
+
+open_threads:
+  - "Replace the placeholder update_url before publishing automatic updates."
+  - "Package the Python backend into a simpler installer or executable if a one-step end-user installation is required."
+  - "Run manual acceptance on a user-selected non-sensitive Zotero collection before a stable release."
+
+ai_suggestions_pending:
+  - "Keep the plugin and Python backend as separate release artifacts with versioned compatibility notes."

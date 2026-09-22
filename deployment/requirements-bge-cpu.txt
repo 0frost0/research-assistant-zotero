@@ -1,0 +1,3 @@
+# Optional BGE text baseline in .venv (the default path uses remote Qwen).
+# Install torch first: pip install torch==2.10.0+cpu --index-url https://download.pytorch.org/whl/cpu
+transformers==4.57.6

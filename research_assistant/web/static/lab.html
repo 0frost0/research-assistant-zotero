@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>评测与表格 · 科研助手</title>
+  <link rel="stylesheet" href="/static/styles.css?v=7">
+  <link rel="stylesheet" href="/static/lab.css?v=3">
+</head>
+<body>
+  <header class="app-header"><div><h1>科研助手 · 评测与表格</h1><p>本地证据工作区</p></div><nav><a href="/projects">研究项目</a> · <a href="/">返回问答</a></nav></header>
+  <main class="lab">
+    <nav class="lab-tabs" aria-label="视图"><button id="evalTab" aria-pressed="true">多模态评测</button><button id="tableTab" aria-pressed="false">结构化表格</button></nav>
+    <p id="notice" role="status" aria-live="polite"></p>
+    <section id="evaluationView">
+      <div class="toolbar"><button id="runEval">运行评测</button><label>历史运行 <select id="runSelect"></select></label><button id="exportRun" disabled>导出结果</button><span id="jobState"></span></div>
+      <p id="runMeta" class="muted"></p>
+      <div id="policyComparison"></div>
+      <div class="toolbar"><label>标注范围 <select id="metricScope"><option value="draft_development">开发集草案</option><option value="human_approved_development">人工确认的开发集</option><option value="self_match_probe">自匹配功能检查</option></select></label><label>排名 <select id="rankingMode"><option value="displayed">网页显示排名</option><option value="raw">原始向量排名</option></select></label></div>
+      <div class="scroll" id="metrics"></div>
+      <p id="qualityState" class="quality"></p>
+      <div id="aiReviewState"></div>
+      <div class="review-layout">
+        <aside><h2>评测问题</h2><label>证据类别 <select id="caseFilter"><option value="all">全部</option><option value="text">文字</option><option value="image">图片</option><option value="mixed">混合</option></select></label><div id="caseList" class="item-list"></div></aside>
+        <section id="caseDetail"><p class="muted">暂无运行结果</p></section>
+      </div>
+    </section>
+    <section id="tablesView" hidden>
+      <form id="tableSearch" class="toolbar"><label>表格关键词 <input id="tableQuery" type="search"></label><label>来源 <select id="tableSource"><option value="">全部</option></select></label><button>检索表格</button><span id="tableStats"></span></form>
+      <div class="toolbar"><button id="tablePrev" disabled>上一页</button><span id="tablePage"></span><button id="tableNext" disabled>下一页</button></div>
+      <div class="review-layout"><aside><h2>表格列表</h2><div id="tableList" class="item-list"></div></aside><section id="tableDetail"><p class="muted">尚未选择表格</p></section></div>
+      <section class="sql-section"><h2>只读 SQL</h2><form id="sqlForm"><label>查询 <textarea id="sql" rows="5" spellcheck="false">SELECT t.source, t.page, t.caption, t.row_count, t.column_count
+FROM research_tables t
+ORDER BY t.source, t.page
+LIMIT 20</textarea></label><div class="toolbar"><button>执行查询</button><button id="cellSql" type="button" disabled>查询当前表单元格</button><span id="sqlState"></span></div></form><div id="sqlResults" class="scroll"></div></section>
+    </section>
+  </main>
+  <script src="/static/lab.js?v=4"></script>
+</body>
+</html>

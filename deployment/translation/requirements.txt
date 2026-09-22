@@ -1,0 +1,5 @@
+# API adapter verified against this pair; BabelDOC 0.6.4 conflicts with
+# pdf2zh-next 2.9.0's PyMuPDF<1.25.3 constraint. Do not upgrade independently.
+pdf2zh-next==2.9.0
+BabelDOC==0.6.2
+PyMuPDF==1.25.2

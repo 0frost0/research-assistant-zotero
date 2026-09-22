@@ -1,0 +1,32 @@
+session:
+  id: "2026-09-21_002"
+  timestamp: "2026-09-21T17:30+08:00"
+  summary: "Prepared the Zotero plugin for a standalone GitHub repository."
+
+events_logged:
+  - type: decision
+    id: N05
+    provenance: user
+    summary: "Publish the plugin through the user's newly created GitHub repository."
+  - type: heuristic
+    id: H03
+    provenance: ai-suggested
+    summary: "Keep the public plugin repository independently buildable."
+
+ai_actions:
+  - action: "Created a Chinese GitHub README covering installation, configuration, privacy, building, verification, and releases."
+    provenance: ai-executed
+    files_changed:
+      - "deployment/zotero/README.md"
+  - action: "Added and verified a standalone XPI build script."
+    provenance: ai-executed
+    files_changed:
+      - "deployment/zotero/build.py"
+      - "deployment/zotero/dist/research-assistant-0.1.0.xpi"
+
+claims_touched: []
+
+open_threads:
+  - "The user still needs to provide the repository URL or upload the prepared files through GitHub."
+
+ai_suggestions_pending: []

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>研究项目 · 科研助手</title>
+  <link rel="stylesheet" href="/static/styles.css?v=9">
+  <link rel="stylesheet" href="/static/lab.css?v=3">
+  <link rel="stylesheet" href="/static/projects.css?v=2">
+</head>
+<body>
+  <header class="app-header"><h1>科研助手 · 研究项目</h1><nav aria-label="工作区"><a href="/">文献问答</a><a href="/lab">评测与表格</a></nav></header>
+  <main class="lab projects">
+    <p id="notice" role="status" aria-live="polite"></p>
+    <div class="project-layout">
+      <aside class="project-sidebar">
+        <div class="toolbar"><h2>我的项目</h2><button id="newProject">新建项目</button></div>
+        <label class="check"><input id="showArchived" type="checkbox">显示已归档</label>
+        <div id="projectList" class="item-list"></div>
+      </aside>
+      <section id="projectContent" hidden>
+        <div class="project-heading"><h2 id="projectTitle"></h2><span id="projectStats" class="muted"></span><button id="refreshProject" title="重新读取项目和工作流状态">刷新项目</button></div>
+        <p id="projectGoal"></p>
+        <nav class="lab-tabs" aria-label="项目视图">
+          <button data-tab="tasks" aria-pressed="true">任务进度</button><button data-tab="planning" aria-pressed="false">规划与审批</button><button data-tab="memory" aria-pressed="false">项目记忆</button><button data-tab="history" aria-pressed="false">活动记录</button>
+        </nav>
+        <section id="tasksView">
+          <div class="toolbar"><label>任务状态<select id="taskFilter"><option value="all">全部</option><option value="todo">待开始</option><option value="doing">进行中</option><option value="done">已完成</option><option value="blocked">受阻</option></select></label><button id="addTask">添加任务</button></div>
+          <div id="taskList"></div>
+        </section>
+        <section id="planningView" hidden>
+          <form id="planningForm" class="project-form">
+            <label>本次规划要求<textarea id="planningRequest" rows="3" maxlength="3000" required placeholder="例如：结合当前进展，安排接下来的基线实验和文献阅读"></textarea></label>
+            <label class="check consent"><input id="planConsent" type="checkbox">允许将项目目标、记忆、任务进展和所选文献片段发送给 DeepSeek</label>
+            <div class="toolbar"><button id="generatePlan">拟定新增任务</button><span id="planningState" class="muted" aria-live="polite"></span></div>
+          </form>
+          <div class="toolbar"><label>工作流记录<select id="proposalSelect"></select></label></div>
+          <div id="proposalDetail"></div>
+        </section>
+        <section id="memoryView" hidden>
+          <form id="memoryForm" class="project-form">
+            <div class="settings-row"><label>项目名称<input id="projectName" maxlength="120" required></label><label>未完成任务工时预算<input id="projectHours" type="number" min="1" max="80" step="0.25" required></label></div>
+            <label>研究目标<textarea id="goalInput" rows="3" maxlength="3000" required></textarea></label>
+            <label>项目记忆与约束<textarea id="memoryInput" rows="5" maxlength="4000" placeholder="已确定的方法、可用设备、数据限制与重要决策"></textarea></label>
+            <fieldset><legend>规划使用的资料</legend><div id="projectSources" class="source-options"></div></fieldset>
+            <label class="check"><input id="archiveProject" type="checkbox">已归档</label>
+            <div class="toolbar"><button>保存项目记忆</button></div>
+          </form>
+        </section>
+        <section id="historyView" hidden><ol id="eventList" class="event-list"></ol></section>
+      </section>
+      <section id="emptyProjects"><h2>尚未选择研究项目</h2></section>
+    </div>
+    <dialog id="projectDialog"><form id="createProjectForm" class="project-form"><h2>新建研究项目</h2><label>项目名称<input id="newName" maxlength="120" required></label><label>研究目标<textarea id="newGoal" rows="3" maxlength="3000" required></textarea></label><label>未完成任务工时预算<input id="newHours" type="number" min="1" max="80" step="0.25" value="10" required></label><div class="toolbar"><button>创建项目</button><button type="button" data-close="projectDialog">取消</button></div></form></dialog>
+    <dialog id="taskDialog"><form id="createTaskForm" class="project-form"><h2>添加研究任务</h2><label>任务名称<input id="newTaskTitle" maxlength="200" required></label><label>目的与交付物<textarea id="newTaskPurpose" maxlength="1500" rows="3"></textarea></label><div class="settings-row"><label>预计工时<input id="newTaskHours" type="number" min="0.25" max="80" step="0.25" value="1" required></label><label>优先级<select id="newTaskPriority"><option value="high">高</option><option value="medium" selected>中</option><option value="low">低</option></select></label></div><fieldset><legend>依赖任务</legend><div id="newTaskDependencies" class="source-options"></div></fieldset><div class="toolbar"><button>添加任务</button><button type="button" data-close="taskDialog">取消</button></div></form></dialog>
+  </main>
+  <script src="/static/projects.js?v=2"></script>
+</body>
+</html>

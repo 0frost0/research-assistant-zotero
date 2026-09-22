@@ -1,0 +1,50 @@
+// Only the isolated preview provider is allowed; no real translation requests.
+async page => {
+  if (!page.url().startsWith("http://127.0.0.1:8766/")) throw Error("Preview required");
+  const cfg = await page.evaluate(() => fetch("/api/reading/settings").then(r=>r.json()));
+  if (cfg.model !== "fixture-no-network") throw Error("Mock provider required");
+  await page.unroute("**/api/reading/jobs");
+  const checks=[]; const check=(ok,name)=>{if(!ok)throw Error(name);checks.push(name);};
+  await page.reload();
+  await page.waitForFunction(()=>[...document.querySelector("#papers").options].some(o=>o.textContent==="scientific-en.pdf"));
+  await page.locator("#papers").selectOption({label:"scientific-en.pdf"});
+  await page.waitForFunction(()=>document.querySelector(".pane")?.getAttribute("aria-busy")==="false");
+  await page.evaluate(()=>{window.confirm=()=>{throw Error("Native dialog must not be used for translation");};});
+  await page.locator("#translate").click();
+  check(await page.locator("#translation-dialog").isVisible(),"in-page confirmation visible");
+  await page.getByRole("button",{name:"暂不翻译",exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector("#translation-feedback").textContent.includes("未提交"));
+  check((await page.locator("#translation-feedback").innerText()).includes("未提交"),"cancel provides feedback");
+  await page.route("**/api/reading/jobs",async route=>{
+    if(route.request().method()==="POST")await page.waitForTimeout(1200);
+    await route.continue();
+  });
+  await page.locator("#translate").click(); await page.locator("#translation-start").click();
+  await page.locator("#translation-feedback progress").waitFor({state:"visible"});
+  check(await page.locator("#translate").isDisabled(),"submitting indicator prevents repeated clicks");
+  await page.waitForFunction(()=>document.querySelector("#jobs .running"));
+  check(await page.locator("#jobs .running progress").count()===1,"running task has progress bar");
+  await page.getByRole("button",{name:"停止任务",exact:true}).first().click();
+  await page.waitForFunction(()=>document.querySelector("#jobs .failed")&&!document.querySelector("#jobs .running"));
+  const before=await page.evaluate(()=>fetch("/api/reading/jobs?paper_id="+document.querySelector("#papers").value).then(r=>r.json()));
+  const failed=before[0]; check(failed.state==="failed","stopped task persisted");
+  await page.locator("#translate").click();await page.locator("#translation-start").click();
+  await page.waitForFunction(()=>document.querySelector("#jobs .succeeded progress")?.value===100,{},{timeout:20000});
+  const after=await page.evaluate(id=>fetch("/api/reading/jobs").then(r=>r.json()).then(j=>j.find(x=>x.id===id)),failed.id);
+  check(after.attempt===failed.attempt+1,"full translation button restarts existing failed job");
+  check((await page.locator("#jobs .succeeded .progress-label").innerText()).includes("100%"),"completion shows 100 percent");
+  const requests=after.budget.requests;
+  await page.locator("#translate").click();await page.locator("#translation-start").click();
+  await page.waitForFunction(()=>document.querySelector("#translation-feedback").textContent.includes("已有译文"));
+  const reused=await page.evaluate(id=>fetch("/api/reading/jobs").then(r=>r.json()).then(j=>j.find(x=>x.id===id)),failed.id);
+  check(reused.budget.requests===requests,"existing successful translation reused without new request");
+  await page.unroute("**/api/reading/jobs");
+  await page.route("**/api/reading/jobs?*", route=>route.abort());
+  await page.waitForFunction(()=>document.querySelector("#translation-feedback").textContent.includes("无法更新进度"),{},{timeout:10000});
+  check(await page.locator("#jobs .succeeded").count()>0,"connection failure preserves last visible status");
+  await page.unroute("**/api/reading/jobs?*");
+  await page.waitForFunction(()=>document.querySelector("#translation-feedback").hidden,{},{timeout:10000});
+  check(true,"polling recovers after connection returns");
+  await page.screenshot({path:"output/playwright/reader-progress.png",fullPage:true});
+  return {passed:checks.length,checks,provider:"simulated; no paid model calls"};
+}

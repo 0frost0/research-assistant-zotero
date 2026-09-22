@@ -1,0 +1,46 @@
+﻿# 密钥
+.env
+.env.*
+!.env.reading.example
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+
+# 环境和模型
+.alignment_env/
+.translation_env/
+.alignment_models/
+*.safetensors
+*.ckpt
+*.pth
+*.pt
+
+# 文献和数据库
+library/
+.data/
+*.sqlite
+*.sqlite3
+*.db
+*.pdf
+
+# 缓存和输出
+.cache/
+.reader_assets/
+output/
+dist/
+deployment/zotero/dist/
+*.log
+*.pid
+
+# 编辑器
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

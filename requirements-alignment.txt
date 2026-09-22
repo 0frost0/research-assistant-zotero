@@ -1,0 +1,5 @@
+onnxruntime==1.30.0
+tokenizers==0.23.2
+numpy==2.3.5
+PyMuPDF==1.28.2
+onnx==1.22.0

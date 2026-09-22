@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" windowtype="research-assistant-workbench">
+<head>
+  <meta charset="utf-8" />
+  <title>科研助手</title>
+  <link rel="stylesheet" href="assistant.css" />
+</head>
+<body>
+  <header>
+    <div>
+      <h1>科研助手</h1>
+      <p>Zotero 分类知识库</p>
+    </div>
+    <div class="status-area">
+      <span id="engineStatus" class="status offline">检查后端中</span>
+      <button id="startEngine">启动 Python 引擎</button>
+      <button id="configureEngine">引擎设置</button>
+      <button id="configureConnection">连接设置</button>
+    </div>
+  </header>
+
+  <div id="notice" role="status" aria-live="polite"></div>
+
+  <main>
+    <aside>
+      <div class="section-heading">
+        <h2>知识库</h2>
+        <button id="refreshBases" title="刷新知识库">刷新</button>
+      </div>
+      <div class="side-actions">
+        <button id="syncCollection" class="primary">同步当前分类</button>
+        <label><input id="showArchived" type="checkbox" />显示已归档</label>
+      </div>
+      <div id="baseList" class="base-list"></div>
+    </aside>
+
+    <section class="workspace">
+      <div class="workspace-heading">
+        <div>
+          <h2 id="baseTitle">尚未选择知识库</h2>
+          <p id="baseMeta" class="muted"></p>
+        </div>
+        <div class="commands">
+          <button id="archiveBase" disabled="disabled">归档</button>
+          <button id="exportBackup">导出备份</button>
+          <button id="writeBack">写回 Zotero</button>
+        </div>
+      </div>
+
+      <form id="searchForm">
+        <label for="query">检索问题</label>
+        <div class="search-row">
+          <input id="query" maxlength="2000" autocomplete="off" required="required"
+                 placeholder="输入研究问题或关键词" />
+          <button id="searchButton" class="primary" type="submit">检索</button>
+        </div>
+        <div class="segments" role="group" aria-label="检索范围">
+          <label><input type="radio" name="scope" value="both" checked="checked" /><span>文献与笔记</span></label>
+          <label><input type="radio" name="scope" value="original" /><span>仅文献</span></label>
+          <label><input type="radio" name="scope" value="notes" /><span>仅笔记</span></label>
+        </div>
+      </form>
+
+      <nav class="tabs" aria-label="知识库视图">
+        <button type="button" data-view="results" aria-selected="true">检索结果</button>
+        <button type="button" data-view="members" aria-selected="false">资料与批注</button>
+        <button type="button" data-view="notes" aria-selected="false">专题笔记</button>
+      </nav>
+
+      <section id="resultsView">
+        <p id="resultMeta" class="muted"></p>
+        <div id="results"><p class="empty">暂无检索结果</p></div>
+      </section>
+
+      <section id="membersView" hidden="hidden">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>标题</th><th>类型</th><th>版本</th></tr></thead>
+            <tbody id="members"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="notesView" hidden="hidden">
+        <div class="notes-layout">
+          <div>
+            <div class="section-heading">
+              <h3>专题笔记</h3>
+              <button id="newNote" type="button">新建</button>
+            </div>
+            <div id="noteList"></div>
+          </div>
+          <form id="noteForm" class="note-editor" hidden="hidden">
+            <h3 id="noteEditorTitle">新建笔记</h3>
+            <label for="noteTitle">标题</label>
+            <input id="noteTitle" maxlength="500" />
+            <label for="noteBody">正文</label>
+            <textarea id="noteBody" rows="12" maxlength="100000" required="required"></textarea>
+            <label class="check"><input id="noteConfirmed" type="checkbox" checked="checked" />已确认，可用于检索</label>
+            <div class="editor-actions">
+              <button id="cancelNote" type="button">取消</button>
+              <button id="saveNote" class="primary" type="submit">保存</button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </section>
+  </main>
+  <script src="assistant.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+sessions:
+  - id: "2026-09-21_001"
+    file: "2026-09-21_001.yaml"
+    summary: "Completed Zotero 9 native acceptance and rebuilt the plugin package."
+  - id: "2026-09-21_002"
+    file: "2026-09-21_002.yaml"
+    summary: "Prepared the Zotero plugin for a standalone GitHub repository."
+  - id: "2026-09-21_003"
+    file: "2026-09-21_003.yaml"
+    summary: "Integrated the Python research engine into a packaged Zotero workbench and completed final acceptance."

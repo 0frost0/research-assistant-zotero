@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Zotero 知识库 · 科研助手</title>
+  <link rel="stylesheet" href="/static/knowledge.css">
+  <script src="/static/vendor/lucide.min.js" defer></script>
+  <script src="/static/knowledge.js" defer></script>
+</head>
+<body>
+  <header><a href="/" class="brand"><i data-lucide="library"></i>科研助手</a><span>Zotero 知识库</span>
+    <nav><a href="/projects">研究项目</a><button id="export" title="导出全部知识库备份" aria-label="导出全部知识库备份"><i data-lucide="download"></i></button>
+      <button id="connection" title="后端连接" aria-label="后端连接"><i data-lucide="plug"></i></button></nav>
+  </header>
+  <div id="notice" role="status" aria-live="polite"></div>
+  <main>
+    <aside>
+      <div class="heading"><h1>知识库</h1><button id="refresh" title="刷新知识库" aria-label="刷新知识库"><i data-lucide="refresh-cw"></i></button></div>
+      <label class="toggle"><input type="checkbox" id="showArchived">显示已归档</label>
+      <div id="baseList"></div>
+      <div id="connectionState" class="muted"></div>
+    </aside>
+    <section class="workspace">
+      <div class="heading"><div><h2 id="baseTitle">尚未选择知识库</h2><div id="baseMeta" class="muted"></div></div>
+        <button id="archive" title="归档或恢复当前知识库" aria-label="归档或恢复当前知识库" disabled><i data-lucide="archive"></i></button></div>
+      <form id="searchForm">
+        <label for="query">检索问题</label>
+        <div class="search-row"><input id="query" maxlength="2000" autocomplete="off" required placeholder="输入研究问题或关键词">
+          <button class="primary" type="submit" id="searchButton"><i data-lucide="search"></i>检索</button></div>
+        <div class="segments" role="group" aria-label="检索范围">
+          <label><input type="radio" name="scope" value="both" checked><span>文献与笔记</span></label>
+          <label><input type="radio" name="scope" value="original"><span>仅文献</span></label>
+          <label><input type="radio" name="scope" value="notes"><span>仅笔记</span></label>
+        </div>
+      </form>
+      <nav class="tabs" aria-label="知识库视图">
+        <button data-view="results" aria-selected="true">检索结果</button>
+        <button data-view="members" aria-selected="false">资料与批注</button>
+        <button data-view="notes" aria-selected="false">专题笔记</button>
+      </nav>
+      <section id="resultsView"><div id="resultMeta" class="muted"></div><div id="results"><p class="empty">暂无检索结果</p></div></section>
+      <section id="membersView" hidden><div class="table-wrap"><table><thead><tr><th>标题</th><th>类型</th><th>版本</th></tr></thead><tbody id="members"></tbody></table></div></section>
+      <section id="notesView" hidden>
+        <div class="heading"><h3>当前库的专题笔记</h3><button id="newNote" title="新建笔记" aria-label="新建笔记"><i data-lucide="plus"></i></button></div>
+        <div id="noteList"></div>
+      </section>
+    </section>
+  </main>
+  <dialog id="connectDialog"><form id="connectForm">
+    <h2>后端连接</h2><label for="token">连接令牌</label><input id="token" type="password" autocomplete="off" required>
+    <div class="actions"><button type="button" id="cancelConnect">取消</button><button class="primary">连接</button></div>
+  </form></dialog>
+  <dialog id="noteDialog"><form id="noteForm">
+    <h2>专题笔记</h2><label for="noteTitle">标题</label><input id="noteTitle" maxlength="500">
+    <label for="noteBody">正文</label><textarea id="noteBody" rows="9" maxlength="100000" required></textarea>
+    <label class="toggle"><input id="noteConfirmed" type="checkbox" checked>已确认，可用于检索</label>
+    <div class="actions"><button type="button" id="cancelNote">取消</button><button class="primary" id="saveNote"><i data-lucide="save"></i>保存</button></div>
+  </form></dialog>
+</body>
+</html>

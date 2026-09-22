@@ -1,0 +1,58 @@
+.lab { max-width: 1520px; margin: auto; padding: 20px 28px 50px; }
+.app-header a { color: #dcebed; font-size: 14px; white-space: nowrap; }
+.lab h2 { font-size: 17px; margin: 12px 0; }
+.lab h3 { font-size: 15px; }
+.lab p { line-height: 1.6; overflow-wrap: anywhere; }
+.lab button { border: 1px solid var(--line); border-radius: 4px; padding: 8px 12px; background: white; color: var(--text); cursor: pointer; }
+.lab button:hover { border-color: var(--accent); }
+.lab button:disabled { opacity: .5; cursor: default; }
+.lab button[aria-pressed="true"] { background: var(--accent); color: white; }
+.lab button:focus-visible, .lab a:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.lab input, .lab select, .lab textarea { border: 1px solid var(--line); border-radius: 4px; padding: 8px; background: white; min-width: 0; max-width: 100%; }
+.lab label { display: flex; align-items: center; gap: 8px; font-size: 13px; min-width: 0; white-space: nowrap; }
+.lab input, .lab select { width: auto; }
+.lab select { max-width: 330px; }
+.lab-tabs { display: flex; gap: 8px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 14px 0; }
+.muted, #tableStats, #jobState, #sqlState { color: var(--muted); font-size: 13px; }
+#notice:empty { display: none; }
+#notice { color: #943e2e; background: #fff0e8; padding: 10px; }
+.quality { font-size: 13px; border-left: 3px solid #cc9d30; padding-left: 12px; }
+.ai-note { border-left: 3px solid #548b82; padding-left: 12px; font-size: 13px; color: #294e48; }
+#aiReviewState { border-top: 1px solid var(--line); padding-top: 8px; }
+.scroll { overflow: auto; max-width: 100%; }
+.lab table { border-collapse: collapse; width: 100%; background: white; font-size: 13px; }
+.lab th, .lab td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; min-width: 68px; max-width: 360px; overflow-wrap: anywhere; }
+.lab th { background: #eef2f3; font-weight: 600; }
+.review-layout { display: grid; grid-template-columns: minmax(230px, 300px) minmax(0, 1fr); border-top: 1px solid var(--line); margin-top: 20px; }
+.review-layout > aside { border-right: 1px solid var(--line); padding: 8px 18px 20px 0; min-width: 0; }
+.review-layout > section { padding: 8px 0 20px 24px; min-width: 0; }
+.item-list { margin-top: 14px; max-height: 740px; overflow-y: auto; }
+.item-list button { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 12px 8px; width: 100%; text-align: left; background: transparent; font-size: 13px; overflow-wrap: anywhere; line-height: 1.5; }
+.item-list button.selected { background: #e3eeea; box-shadow: inset 3px 0 var(--accent); color: #114c41; }
+.reviewer { width: 155px; }
+.expected { border-left: 3px solid var(--blue); padding: 0 12px; margin: 12px 0; }
+.expected img, .hit img { max-width: 100%; max-height: 300px; display: block; object-fit: contain; object-position: left; margin: 10px 0; background: white; }
+.hit { border-top: 1px solid var(--line); padding: 14px 0; }
+.hit > p { font-size: 13px; }
+.hit select { min-width: 100px; }
+.lab a { overflow-wrap: anywhere; }
+.hit a, .expected a, #tableDetail a { color: var(--blue); }
+.sql-section { border-top: 1px solid var(--line); padding-top: 16px; }
+#sqlForm > label { display: block; }
+#sql { display: block; width: 100%; margin-top: 8px; font-family: Consolas, monospace; font-size: 13px; }
+.table-preview { display: block; max-height: 440px; max-width: 100%; object-fit: contain; margin-top: 15px; }
+details { margin: 12px 0; font-size: 13px; }
+summary { cursor: pointer; }
+.grade-note { flex: 1; min-width: 130px; }
+@media (max-width: 800px) {
+  .lab { padding: 16px; }
+  .app-header { padding: 0 16px; gap: 12px; }
+  .app-header h1 { font-size: 17px; }
+  .review-layout { grid-template-columns: minmax(0, 1fr); }
+  .review-layout > aside { border-right: 0; padding-right: 0; }
+  .review-layout > section { padding-left: 0; border-top: 1px solid var(--line); }
+  .item-list { max-height: 240px; }
+  .toolbar label { flex-wrap: wrap; }
+  #runSelect, #tableSource { max-width: 260px; }
+}

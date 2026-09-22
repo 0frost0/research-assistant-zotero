@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>科研阅读与记忆</title>
+    <link rel="stylesheet" href="/reader-assets/web/pdf_viewer.css" />
+    <link rel="stylesheet" href="/static/reader/reader.css?v=sentence-v6" />
+  </head>
+  <body>
+    <header>
+      <a href="/" class="brand">研读 <span>RESEARCH LIBRARY</span></a><strong>阅读工作台</strong
+      ><select id="papers" aria-label="论文"></select>
+      <label class="button"
+        >上传 PDF<input id="upload" type="file" accept=".pdf" hidden /></label
+      ><button id="reload">刷新资料</button><button id="focus">专注阅读</button><a href="#settings">翻译设置</a>
+    </header>
+    <p id="notice" role="status">正在加载本地阅读器…</p>
+    <main>
+      <section id="reading">
+        <div class="reading-heading"><div><span class="eyebrow">YOUR PAPER, WITH CONTEXT</span><h1 id="paper-title">打开一篇论文，开始研读</h1></div><span id="paper-meta" class="tag"></span></div>
+        <div class="toolbar">
+          <label
+            >文档版本
+            <select id="versions"></select></label
+          ><button id="compare">中英对照</button>
+          <label class="sync-label"><input id="sync-pages" type="checkbox" checked disabled />同步翻页</label>
+          <label class="sync-label"><input id="sync-selection" type="checkbox" checked />选区联动</label>
+          <a id="download">下载当前 PDF</a
+          ><button id="translate" class="primary">翻译全文</button>
+        </div>
+        <p id="translation-feedback" role="status" hidden></p>
+        <div id="jobs" aria-label="全文翻译任务"></div>
+        <p id="selection-sync-status" class="hint" role="status"></p>
+        <p class="hint">
+          同步翻页按 PDF 物理页码联动。选区统一扩展为完整句；机器对齐仍需结合原文核对。
+        </p>
+        <div id="panes"></div>
+        <details id="settings">
+          <summary>翻译配置与支持范围</summary>
+          <p id="service"></p>
+          <div class="budget-controls"><button id="retranslate">生成新译文版本</button></div>
+          <p>全文翻译不设单篇或每日 token、请求总数上限。按实际响应统计用量；限制失败重试并检测重复请求，保留超时和手动停止。</p>
+          <label
+            ><input
+              id="auto"
+              type="checkbox"
+            />英文新上传文献自动生成整篇中文 PDF（默认关闭）</label
+          >
+          <p>
+            运行 scripts/install_reader.ps1。在项目 .env 设置
+            RESEARCH_TRANSLATION_ENABLED=true，并配置
+            TRANSLATION_API_KEY、TRANSLATION_MODEL、TRANSLATION_BASE_URL；未单独设置时复用现有
+            OPENAI_*。修改后重启服务。密钥只在服务器保存。
+          </p>
+          <p>
+            第一版支持有文字层的英文
+            PDF；低文字页、扫描页、加密文件不进入自动翻译。复杂表格、公式和版式必须核对。成功表示产物通过自动检查，不表示全文质量已人工验收。翻译引擎首次运行需要下载字体和布局模型。旧译文永久保留，笔记不自动迁移。
+          </p>
+        </details>
+      </section>
+      <aside>
+        <div class="aside-heading"><span class="eyebrow">READ • REFLECT • REMEMBER</span><h2>阅读手记</h2></div>
+        <div class="side-tabs" role="tablist" aria-label="阅读工具"><button role="tab" aria-selected="true" data-panel="note-panel">笔记</button><button role="tab" aria-selected="false" data-panel="selection-panel">选区译文</button><button role="tab" aria-selected="false" data-panel="question-panel">找回与提问</button></div>
+        <section id="selection-panel" class="side-panel" hidden>
+        <h3>按需翻译</h3>
+        <p class="hint">在原文句中选择任意文字，系统扩展为完整句后仅发送该句。相同内容优先读取本地缓存；不会自动翻译整篇、重试或切换服务。</p>
+        <button id="translate-selection">翻译选区（调用已配置服务）</button>
+        <p id="selection-budget" class="hint"></p>
+        <div id="selection-translation" aria-live="polite"></div>
+        <details><summary>最近译文（本地保存）</summary><div id="translation-history"></div></details>
+        </section><section id="note-panel" class="side-panel">
+        <h3>选区与笔记</h3>
+        <p id="selection">选择句中任意文字后，系统按完整句划线、翻译或记录来源。</p>
+        <div class="toolbar">
+          <button id="highlight">保存高亮</button
+          ><button id="underline">保存下划线</button
+          ><button id="attach">选区加入笔记来源</button>
+        </div>
+        <p class="hint">
+          每次只保存一个完整句。跨句、跨页、跨栏请分开选择；不把译文坐标当成原文坐标。
+        </p>
+        <button id="new">新笔记</button
+        ><label
+          >类型<select id="type">
+            <option value="understanding">理解</option>
+            <option value="question">疑问</option>
+            <option value="idea">想法</option>
+          </select></label
+        >
+        <textarea
+          id="body"
+          rows="7"
+          placeholder="用自己的话记录理解、疑问或研究想法"
+          aria-label="笔记正文"
+        ></textarea>
+        <div id="anchors"></div>
+        <div id="source-linking" aria-live="polite"></div>
+        <p id="editing"></p>
+        <div class="toolbar">
+          <button id="save" class="primary">保存笔记</button><button id="archive">归档</button
+          ><button id="confirm">确认 AI 草稿</button
+          ><button id="draft">AI 辅助草稿</button>
+        </div>
+        <details>
+          <summary>历史版本</summary>
+          <div id="history"></div>
+        </details>
+        <h3>这篇论文的记录</h3>
+        <label><input id="showArchived" type="checkbox" />显示归档</label>
+        <div id="notes"></div>
+        </section><section id="question-panel" class="side-panel" hidden>
+        <h3>找回与提问</h3>
+        <input
+          id="query"
+          placeholder="我对这个方法还有什么疑问？"
+          aria-label="阅读问题"
+        />
+        <select id="scope">
+          <option value="notes">你的记录（不依赖向量服务）</option>
+          <option value="original">这篇论文实际说了什么</option>
+          <option value="both">原文与记录分别对照</option>
+        </select>
+        <label
+          >原文检索方式<select id="backend">
+            <option value="multimodal">统一多模态</option>
+            <option value="tfidf">本地文字基线（无需向量服务）</option>
+          </select></label
+        >
+        <label
+          ><input id="allPapers" type="checkbox" />查找所有论文的记录</label
+        >
+        <label
+          ><input
+            id="external"
+            type="checkbox"
+          />允许将本次命中片段和输入发送给模型</label
+        >
+        <button id="ask">检索 / 提问</button>
+        <div id="answer"></div>
+        </section>
+      </aside>
+    </main>
+    <script type="module" src="/static/reader/reader.js?v=sentence-v6"></script>
+    <dialog id="translation-dialog" aria-labelledby="translation-dialog-title">
+      <form method="dialog">
+        <h2 id="translation-dialog-title">确认全文翻译</h2>
+        <p id="translation-dialog-text"></p>
+        <p class="hint">将论文文字发送给已配置的翻译服务。按实际 token 统计用量，不设总量上限；可随时停止。</p>
+        <div class="toolbar"><button value="cancel">暂不翻译</button><button value="start" class="primary" id="translation-start">开始翻译</button></div>
+      </form>
+    </dialog>
+  </body>
+</html>

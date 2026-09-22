@@ -1,0 +1,62 @@
+session:
+  id: "2026-09-21_001"
+  timestamp: "2026-09-21T17:23+08:00"
+  summary: "Completed Zotero 9 native acceptance and rebuilt the plugin package."
+
+events_logged:
+  - type: dead_end
+    id: N02
+    provenance: ai-executed
+    summary: "Profile-scanned fixture XPI was removed before debugger installation."
+  - type: experiment
+    id: N03
+    provenance: ai-executed
+    summary: "Captured Zotero's missing update_url validation detail."
+  - type: experiment
+    id: N04
+    provenance: ai-executed
+    summary: "Native synchronization, writeback deduplication, and final XPI activation passed."
+  - type: claim
+    id: C01
+    provenance: ai-suggested
+    summary: "The installed Zotero 9 build requires update_url."
+  - type: claim
+    id: C02
+    provenance: ai-suggested
+    summary: "The packaged bridge passes isolated native activation."
+  - type: heuristic
+    id: H01
+    provenance: ai-suggested
+    summary: "Load native fixtures outside the profile."
+  - type: heuristic
+    id: H02
+    provenance: ai-suggested
+    summary: "Use PathUtils.join for Zotero-local Windows paths."
+
+ai_actions:
+  - action: "Fixed manifest compatibility and hardened native fixture installation diagnostics."
+    provenance: ai-executed
+    files_changed:
+      - "deployment/zotero/manifest.json"
+      - "benchmarks/install_zotero_fixture.py"
+      - "benchmarks/pack_zotero_fixture.py"
+      - "benchmarks/zotero_native_fixture.js"
+      - "tests/zotero_bridge.test.cjs"
+      - "问题排查笔记.md"
+  - action: "Built and verified research-assistant-0.1.0.xpi."
+    provenance: ai-executed
+    files_changed:
+      - "output/zotero/research-assistant-0.1.0.xpi"
+
+claims_touched:
+  - id: C01
+    action: created
+    provenance: ai-suggested
+  - id: C02
+    action: created
+    provenance: ai-suggested
+
+open_threads:
+  - "Production deployment and real-library installation remain user-controlled and were not performed."
+
+ai_suggestions_pending: []

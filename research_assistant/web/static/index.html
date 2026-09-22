@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>科研助手</title>
+  <link rel="stylesheet" href="/static/styles.css?v=11">
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <h1>科研助手</h1>
+      <p id="systemStatus">本地资料库</p>
+    </div>
+    <div class="header-meta">
+      <a href="/knowledge" style="color: inherit">Zotero 知识库</a>
+      <a href="/reader" style="color: inherit">中文阅读与笔记</a>
+      <a href="/projects" style="color: inherit">研究项目</a>
+      <a href="/lab" style="color: inherit">评测与表格</a>
+      <span class="status-dot" aria-hidden="true"></span>
+      <span>Local</span>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="library-panel" aria-labelledby="libraryTitle">
+      <div class="section-heading">
+        <div>
+          <h2 id="libraryTitle">资料库</h2>
+          <span id="fileCount">0 个文件</span>
+        </div>
+        <label class="upload-button" title="上传资料">
+          <span aria-hidden="true">+</span>
+          <span>上传</span>
+          <input id="fileInput" type="file" accept=".pdf,.md,.txt" hidden>
+        </label>
+      </div>
+
+      <label class="select-all-control">
+        <input id="selectAllSources" type="checkbox" checked>
+        <span>使用全部资料</span>
+      </label>
+
+      <div id="dropZone" class="drop-zone">
+        <span>拖放 PDF、Markdown 或 TXT</span>
+        <small>单个文件不超过 25 MB</small>
+      </div>
+
+      <div id="fileList" class="file-list" aria-live="polite"></div>
+
+      <div class="pdf-report-control">
+        <button id="pdfReportButton" class="secondary-button" type="button">
+          检查 PDF 提取
+        </button>
+        <span id="pdfReportMeta"></span>
+      </div>
+      <div id="pdfReportList" class="pdf-report-list hidden" aria-live="polite"></div>
+    </aside>
+
+    <section class="assistant-panel">
+      <div class="mode-tabs" role="tablist" aria-label="工作模式">
+        <button class="mode-tab active" data-mode="answer" role="tab" aria-selected="true">
+          文献问答
+        </button>
+        <button class="mode-tab" data-mode="compare" role="tab" aria-selected="false">
+          多文献对照
+        </button>
+        <button class="mode-tab" data-mode="plan" role="tab" aria-selected="false">
+          研究计划
+        </button>
+      </div>
+
+      <form id="researchForm" class="research-form">
+        <div class="form-grid">
+          <label id="topicControl">
+            <span>研究主题</span>
+            <input id="topic" value="基于医疗agent的心衰诊断与预警" autocomplete="off">
+          </label>
+          <label id="hoursControl">
+            <span>每周时间</span>
+            <div class="number-field">
+              <input id="hours" type="number" min="1" max="80" step="1" value="10">
+              <span>小时</span>
+            </div>
+          </label>
+          <label>
+            <span>检索方式</span>
+            <select id="backend">
+              <option value="multimodal" selected>统一多模态检索</option>
+              <option value="qdrant">Qdrant 文字语义检索</option>
+              <option value="tfidf">本地快速检索</option>
+              <option value="bge">本地 BGE 语义检索</option>
+              <option value="hybrid">混合检索</option>
+            </select>
+          </label>
+          <label>
+            <span>文件类型</span>
+            <select id="fileType">
+              <option value="all">全部类型</option>
+              <option value="pdf">PDF</option>
+              <option value="md">Markdown</option>
+              <option value="txt">TXT</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="retrieval-settings">
+          <label>
+            <span>最低相关度</span>
+            <input id="minScore" type="number" min="0" max="1" step="0.01" value="0.10">
+          </label>
+          <label>
+            <span id="resultCountLabel">证据数量</span>
+            <input id="resultCount" type="number" min="1" max="20" step="1" value="5">
+          </label>
+          <button id="previewButton" class="secondary-button" type="button">
+            只检索
+          </button>
+        </div>
+
+        <label class="question-field">
+          <span id="questionLabel">问题</span>
+          <textarea id="question" rows="5" placeholder="输入需要基于资料回答的问题"></textarea>
+        </label>
+
+        <div class="permission-row">
+          <label class="check-control">
+            <input id="allowExternal" type="checkbox">
+            <span>允许将问题、文献片段及分析稿发送给 DeepSeek</span>
+          </label>
+          <label id="savePlanControl" class="check-control hidden">
+            <input id="savePlan" type="checkbox">
+            <span>保存计划 JSON</span>
+          </label>
+        </div>
+        <p id="permissionError" class="permission-error hidden" role="alert"></p>
+
+        <div class="form-actions">
+          <span id="runStatus" role="status"></span>
+          <button id="cancelComparison" class="secondary-button hidden" type="button">停止对照</button>
+          <button id="runButton" class="primary-button" type="submit">
+            <span id="runButtonText">开始分析</span>
+          </button>
+        </div>
+      </form>
+
+      <div id="comparisonControls" class="comparison-history hidden">
+        <label for="comparisonHistory">对照记录</label>
+        <select id="comparisonHistory"><option value="">选择历史结果</option></select>
+        <button id="reloadComparison" class="secondary-button" type="button">刷新记录</button>
+      </div>
+
+      <section id="searchPanel" class="search-panel hidden" aria-live="polite"></section>
+
+      <section id="resultPanel" class="result-panel" aria-live="polite">
+        <div class="empty-result">
+          <h2>尚无结果</h2>
+          <p>结果、引用和研究任务将在这里显示。</p>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="alert"></div>
+  <script src="/static/app.js?v=12"></script>
+  <script src="/static/comparison.js?v=2"></script>
+</body>
+</html>
