@@ -1,0 +1,59 @@
+.app-header nav { display: flex; gap: 18px; }
+.projects { max-width: 1480px; }
+.project-layout { display: grid; grid-template-columns: minmax(210px, 260px) minmax(0, 1fr); gap: 28px; }
+.project-layout > * { min-width: 0; }
+.project-sidebar { border-right: 1px solid var(--line); padding-right: 20px; }
+.project-sidebar .toolbar { justify-content: space-between; }
+.project-sidebar h2 { margin: 0; }
+.project-heading { display: flex; justify-content: space-between; gap: 14px; align-items: baseline; flex-wrap: wrap; }
+.project-heading h2 { font-size: 21px; overflow-wrap: anywhere; }
+#projectGoal { font-size: 14px; white-space: pre-wrap; }
+.projects .lab-tabs { flex-wrap: wrap; gap: 6px; }
+.projects .project-form { margin-top: 20px; }
+.projects .project-form > label, .projects .settings-row > label { display: flex; flex-direction: column; align-items: stretch; white-space: normal; gap: 7px; margin-bottom: 16px; }
+.projects .project-form input, .projects .project-form textarea, .projects .project-form select { width: 100%; }
+.projects .project-form textarea { resize: vertical; line-height: 1.6; }
+.projects .check { display: flex; flex-direction: row !important; align-items: flex-start !important; gap: 8px; white-space: normal; line-height: 1.5; }
+.projects .check input { width: 16px; height: 16px; margin-top: 2px; flex: 0 0 16px; }
+.projects .settings-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, 220px); gap: 18px; }
+.projects fieldset { border: 0; border-top: 1px solid var(--line); margin: 16px 0; padding: 14px 0; min-width: 0; }
+.projects legend { padding-right: 12px; font-size: 13px; }
+.source-options { display: grid; gap: 10px; max-height: 260px; overflow: auto; }
+.source-options label { overflow-wrap: anywhere; }
+.project-task { padding: 15px 0; border-bottom: 1px solid var(--line); }
+.project-task h3 { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
+.project-task p { margin: 8px 0; font-size: 13px; white-space: pre-wrap; }
+.project-task-meta { display: flex; flex-wrap: wrap; gap: 10px; color: var(--muted); font-size: 12px; margin-top: 8px; }
+.task-editor { display: grid; grid-template-columns: 110px minmax(0, 1fr) auto; gap: 10px; margin-top: 12px; align-items: start; }
+.projects .task-editor textarea { width: 100%; min-height: 42px; font-size: 13px; resize: vertical; }
+.projects .task-editor select { width: 110px; }
+.task-editor button { font-size: 13px; white-space: nowrap; }
+.workflow-state { border-left: 3px solid var(--accent); padding: 10px 12px; background: #e6f0ed; font-size: 14px; }
+.workflow-state.warning { background: #fff5dc; border-color: #ba8628; }
+.draft-summary { white-space: pre-wrap; }
+.proposal-evidence { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 10px; font-size: 13px; }
+.proposal-evidence a { color: var(--blue); display: block; margin: 8px 0; }
+.proposal-evidence img { max-width: 100%; max-height: 180px; object-fit: contain; }
+.projects .primary-command { color: white; background: var(--accent); border-color: var(--accent); }
+.event-list { padding-left: 20px; }
+.event-list li { margin: 16px 0; font-size: 13px; overflow-wrap: anywhere; }
+.event-list time { display: block; color: var(--muted); margin-bottom: 5px; }
+.projects dialog { width: min(600px, calc(100% - 32px)); padding: 24px; border: 1px solid var(--line); border-radius: 6px; max-height: 90vh; overflow: auto; color: var(--text); }
+.projects dialog::backdrop { background: #0007; }
+.projects dialog h2 { margin-top: 0; }
+.projects button:disabled { cursor: not-allowed; }
+.projects [hidden] { display: none !important; }
+@media (max-width: 850px) {
+  .project-layout { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .project-sidebar { border-right: 0; border-bottom: 1px solid var(--line); padding-right: 0; padding-bottom: 14px; }
+  .project-sidebar .item-list { max-height: 180px; }
+}
+@media (max-width: 540px) {
+  .app-header { min-height: 88px; height: auto; padding: 14px 16px; align-items: flex-start; flex-direction: column; gap: 10px; }
+  .app-header h1 { font-size: 18px; }
+  .projects .settings-row { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .task-editor { grid-template-columns: minmax(0, 1fr) auto; }
+  .task-editor textarea { grid-column: 1 / -1; grid-row: 2; }
+  .projects .toolbar label { max-width: 100%; }
+  #proposalSelect { max-width: 100%; }
+}

@@ -4,6 +4,10 @@ var ResearchBridge = {
   busy: false,
   windows: new Set(),
   prefix: "extensions.researchAssistant.",
+  rootURI: "",
+  workbench: null,
+  engineProcess: null,
+  engineStarting: null,
 
   pref(name, fallback = "") {
     return Zotero.Prefs.get(this.prefix + name, true) ?? fallback;
@@ -19,7 +23,7 @@ var ResearchBridge = {
     }
     return url.href.replace(/\/$/, "");
   },
-  async request(path, body, method = "POST") {
+  async response(path, body, method = "POST") {
     const window = Zotero.getMainWindow();
     const controller = new window.AbortController();
     const timer = window.setTimeout(() => controller.abort(), 90000);
@@ -33,14 +37,21 @@ var ResearchBridge = {
         body: body === undefined ? undefined : binary ? body : JSON.stringify(body),
         signal: controller.signal, credentials: "omit", redirect: "error",
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "知识库请求失败");
-      return data;
+      if (!response.ok) {
+        let data = {};
+        try { data = await response.json(); } catch (_) {}
+        throw new Error(data.error || "知识库请求失败");
+      }
+      return response;
     } finally {
       window.clearTimeout(timer);
     }
   },
-  async start() {
+  async request(path, body, method = "POST") {
+    return (await this.response(path, body, method)).json();
+  },
+  async start(rootURI) {
+    this.rootURI = rootURI;
     if (!this.pref("connection")) this.setPref("connection", Zotero.Utilities.randomString(24));
     this.readerHandler = ({ doc, params, append }) => {
       if (!params.annotation?.text) return;
@@ -50,6 +61,7 @@ var ResearchBridge = {
       append(button);
     };
     Zotero.Reader.registerEventListener("renderTextSelectionPopup", this.readerHandler, this.id);
+    this.ensureBackend().catch(error => Zotero.debug("Research Assistant backend: " + error));
   },
   loadWindow(window) {
     if (window.document.getElementById("research-assistant-menu")) return;
@@ -81,8 +93,14 @@ var ResearchBridge = {
   stop() {
     Zotero.Reader.unregisterEventListener("renderTextSelectionPopup", this.readerHandler);
     for (const window of [...this.windows]) this.unloadWindow(window);
+    if (this.workbench && !this.workbench.closed) this.workbench.close();
+    this.workbench = null;
+    if (this.engineProcess && this.pref("stopEngineOnExit", true)) {
+      this.engineProcess.kill(1000).catch(error => Zotero.logError(error));
+    }
+    this.engineProcess = null;
   },
-  async configure(window) {
+  async configure(window = Zotero.getMainWindow()) {
     const endpoint = window.prompt("科研助手后端地址", this.pref("endpoint", "http://127.0.0.1:8765"));
     if (endpoint === null) return;
     const secret = { value: "" };
@@ -100,6 +118,72 @@ var ResearchBridge = {
       this.setPref("endpoint", old.endpoint);
       this.setPref("token", old.token);
       throw error;
+    }
+  },
+  async configureEngine(window = Zotero.getMainWindow()) {
+    const executable = window.prompt(
+      "Python 解释器或已打包科研引擎的完整路径",
+      this.pref("engineExecutable")
+    );
+    if (executable === null) return false;
+    const script = window.prompt(
+      "Python 启动脚本的完整路径；如果上一步选择的是独立 EXE，请留空",
+      this.pref("engineScript")
+    );
+    if (script === null) return false;
+    const workdir = window.prompt(
+      "科研助手工作目录",
+      this.pref("engineWorkdir")
+    );
+    if (workdir === null) return false;
+    this.setPref("engineExecutable", executable.trim());
+    this.setPref("engineScript", script.trim());
+    this.setPref("engineWorkdir", workdir.trim());
+    this.setPref("autoStartEngine", window.confirm("以后启动 Zotero 时自动启动该 Python 引擎？"));
+    this.setPref("stopEngineOnExit", window.confirm("退出 Zotero 时停止由插件启动的引擎？"));
+    return true;
+  },
+  async backendStatus() {
+    try {
+      return { connected: true, ...(await this.request("status", undefined, "GET")) };
+    } catch (error) {
+      return { connected: false, error: error.message };
+    }
+  },
+  async ensureBackend(force = false) {
+    const status = await this.backendStatus();
+    if (status.connected) return status;
+    if (!force && !this.pref("autoStartEngine", false)) return status;
+    return this.startEngine();
+  },
+  async startEngine() {
+    if (this.engineStarting) return this.engineStarting;
+    this.engineStarting = (async () => {
+      const executable = this.pref("engineExecutable").trim();
+      const script = this.pref("engineScript").trim();
+      const workdir = this.pref("engineWorkdir").trim();
+      if (!executable) throw new Error("尚未配置 Python 解释器或科研引擎。");
+      const arguments_ = script ? [script] : [];
+      this.engineProcess = await Subprocess.call({
+        command: executable,
+        arguments: arguments_,
+        workdir: workdir || null,
+        stderr: "pipe",
+      });
+      for (let attempt = 0; attempt < 30; attempt++) {
+        await new Promise(resolve => Zotero.getMainWindow().setTimeout(resolve, 1000));
+        const status = await this.backendStatus();
+        if (status.connected) return status;
+        if (this.engineProcess.exitCode !== null) {
+          throw new Error("Python 科研引擎已退出，未能建立连接。");
+        }
+      }
+      throw new Error("Python 科研引擎启动超时。");
+    })();
+    try {
+      return await this.engineStarting;
+    } finally {
+      this.engineStarting = null;
     }
   },
   libraryKey(libraryID) {
@@ -159,7 +243,7 @@ var ResearchBridge = {
     }
     return { entities: [...entities.values()].sort((a, b) => a.key.localeCompare(b.key)), documents };
   },
-  async sync(window) {
+  async sync(window = Zotero.getMainWindow()) {
     if (this.busy) return window.alert("同步正在进行。");
     const collection = Zotero.getActiveZoteroPane().getSelectedCollection();
     if (!collection) return window.alert("请先选择一个分类，不是整个资料库。");
@@ -191,14 +275,41 @@ var ResearchBridge = {
     }
   },
   open(query = "") {
-    const url = new URL(this.endpoint() + "/knowledge");
-    if (this.pref("lastBase")) url.searchParams.set("kb", this.pref("lastBase"));
-    if (query) url.searchParams.set("q", query.slice(0, 2000));
-    // Fragment is not sent to the HTTP server; the page removes it immediately.
-    url.hash = "token=" + encodeURIComponent(this.pref("token"));
-    Zotero.launchURL(url.href);
+    if (this.workbench && !this.workbench.closed) {
+      this.workbench.focus();
+      this.workbench.ResearchAssistantWorkbench?.setQuery(query);
+      return this.workbench;
+    }
+    const args = { bridge: this, query: query.slice(0, 2000) };
+    this.workbench = Zotero.getMainWindow().openDialog(
+      "chrome://researchassistant/content/assistant.xhtml",
+      "research-assistant-workbench",
+      "chrome,centerscreen,resizable",
+      args
+    );
+    return this.workbench;
   },
-  async writeNotes(window) {
+  openSource(url) {
+    if (typeof url !== "string" || !url.startsWith("zotero://")) {
+      throw new Error("只允许打开 Zotero 内部来源链接。");
+    }
+    Zotero.launchURL(url);
+  },
+  async exportBackup(window = Zotero.getMainWindow()) {
+    const response = await this.response("export", undefined, "GET");
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const { FilePicker } = ChromeUtils.importESModule("chrome://zotero/content/modules/filePicker.mjs");
+    const picker = new FilePicker();
+    picker.init(window, "保存科研知识库备份", picker.modeSave);
+    picker.defaultString = "research-knowledge-backup.zip";
+    picker.defaultExtension = "zip";
+    picker.appendFilter("ZIP 备份", "*.zip");
+    const result = await picker.show();
+    if (result === picker.returnCancel) return false;
+    await IOUtils.write(picker.file, bytes);
+    return true;
+  },
+  async writeNotes(window = Zotero.getMainWindow()) {
     const id = this.pref("lastBase");
     if (!id) return window.alert("请先同步一个分类。");
     const snapshot = await this.request("bases/" + id, undefined, "GET");

@@ -1,0 +1,6 @@
+# Used together in the isolated GPU environment, Python 3.12 / Linux.
+mineru==3.4.5
+vllm==0.19.1
+torch==2.10.0
+transformers==4.57.6
+qwen-vl-utils==0.0.14
