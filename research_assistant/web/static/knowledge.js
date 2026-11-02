@@ -106,7 +106,17 @@ $("searchForm").addEventListener("submit", async event => {
   $("results").replaceChildren(node("p", "正在检索…", "empty"));
   $("searchButton").disabled = true; notice("正在检索…"); showView("results");
   try {
-    const result = await api("search", { kb_ids: [...selected], query: $("query").value, scope: document.querySelector("[name=scope]:checked").value });
+    const payload = { kb_ids: [...selected], query: $("query").value, scope: document.querySelector("[name=scope]:checked").value };
+    let result = await api("search", payload);
+    const started = Date.now();
+    while (result.status === "indexing") {
+      if (generation !== epoch) return;
+      notice(result.warning);
+      $("resultMeta").textContent = "正在准备语义索引";
+      if (Date.now() - started > 180000) return;
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      result = await api("search", payload);
+    }
     if (generation !== epoch) return;
     $("results").replaceChildren();
     $("resultMeta").textContent = `${result.results.length} 条结果 · ${result.backend === "tfidf" ? "关键词检索" : "语义检索"}`;

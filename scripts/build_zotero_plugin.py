@@ -1,22 +1,18 @@
-"""Package the dependency-free Zotero bridge; no install or library changes."""
+"""Package the dependency-free Zotero bridge; no install or library changes.
+
+The asset list lives in ``deployment/zotero/build.py`` so the standalone plugin
+directory stays independently buildable (H03) without duplicating the manifest
+of packaged files in two places.
+"""
 from pathlib import Path
-import json
-import zipfile
+import importlib.util
 
 root = Path(__file__).resolve().parents[1]
 source = root / "deployment/zotero"
-manifest = json.loads((source / "manifest.json").read_text())
-output = root / "output/zotero" / ("research-assistant-" + manifest["version"] + ".xpi")
-output.parent.mkdir(parents=True, exist_ok=True)
-assets = (
-    "manifest.json",
-    "bootstrap.js",
-    "bridge.js",
-    "assistant.xhtml",
-    "assistant.css",
-    "assistant.js",
-)
-with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
-    for name in assets:
-        archive.write(source / name, name)
+spec = importlib.util.spec_from_file_location("zotero_plugin_build", source / "build.py")
+builder = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(builder)
+
+output, checksum = builder.build(root / "output/zotero")
 print(output)
+print("sha256 " + checksum)

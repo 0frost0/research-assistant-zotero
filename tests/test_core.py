@@ -351,7 +351,7 @@ class PDFExtractionTests(unittest.TestCase):
         self.assertEqual(report.empty_pages, 1)
         self.assertEqual(report.pages[0].status, "ocr_unavailable")
 
-    def test_image_only_pdf_uses_ocr(self) -> None:
+    def test_image_only_pdf_uses_ocr_when_system_tools_are_available(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "scan.pdf"
             image = Image.new("RGB", (1400, 360), "white")
@@ -365,11 +365,29 @@ class PDFExtractionTests(unittest.TestCase):
             draw.text((70, 120), "SCANNED TEST ALPHA", fill="black", font=font)
             image.save(path, "PDF", resolution=150)
 
-            documents, report = PDFExtractor(
+            extractor = PDFExtractor(
                 enable_ocr=True,
                 ocr_language="eng",
                 min_native_chars=20,
-            ).extract(path)
+            )
+            available, reason = extractor._ocr_available()
+            if not available:
+                self.skipTest(reason or "OCR tools unavailable")
+            documents, report = extractor.extract(path)
+
+        self.assertEqual(report.ocr_pages, 1)
+        self.assertEqual(report.pages[0].method, "ocr")
+        self.assertIn("SCANNED", documents[0].page_content.upper())
+
+    def test_image_only_pdf_ocr_branch_is_deterministic_without_system_tools(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "scan.pdf"
+            image = Image.new("RGB", (300, 120), "white")
+            image.save(path, "PDF")
+            extractor = PDFExtractor(enable_ocr=True, ocr_language="eng", min_native_chars=20)
+            with patch.object(extractor, "_ocr_available", return_value=(True, None)), \
+                    patch.object(extractor, "_ocr_page", return_value="SCANNED TEST ALPHA"):
+                documents, report = extractor.extract(path)
 
         self.assertEqual(report.ocr_pages, 1)
         self.assertEqual(report.pages[0].method, "ocr")

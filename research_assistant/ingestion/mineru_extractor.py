@@ -74,8 +74,12 @@ class MinerUExtractor:
         python_executable: Path | None = None,
         server_url: str | None = None,
         timeout_seconds: int | None = None,
+        mode: str = "remote",
     ) -> None:
         self.cache_dir = (cache_dir or DEFAULT_CACHE_DIR).resolve()
+        if mode not in {"local", "remote"}:
+            raise ValueError("Unknown MinerU mode")
+        self.mode = mode
         # Linux venv interpreters are symlinks. Resolving them loses pyvenv.cfg
         # discovery and runs system Python without the MinerU dependencies.
         self.python_executable = (python_executable or _default_python()).absolute()
@@ -104,6 +108,8 @@ class MinerUExtractor:
 
     def server_status(self, timeout_seconds: float = 3.0) -> tuple[bool, str | None]:
         """快速确认远程模型隧道可用，避免启动注定失败的长任务。"""
+        if self.mode == "local":
+            return self.configured, None if self.configured else "MinerU Python 环境不存在"
         try:
             with urllib.request.urlopen(
                 f"{self.server_url}/health", timeout=timeout_seconds
@@ -183,7 +189,7 @@ class MinerUExtractor:
             if page is not None:
                 pages.add(page)
             text = _content_list_text(block)
-            if not text:
+            if not text and not block.get("img_path"):
                 continue
             image_path = block.get("img_path")
             if image_path:
@@ -191,9 +197,11 @@ class MinerUExtractor:
                 if not candidate.is_absolute():
                     candidate = content_list_path.parent / candidate
                 image_path = str(candidate.resolve())
+                if not candidate.resolve().is_relative_to(cache_path.resolve()) or not candidate.is_file():
+                    raise MinerUExtractionError("MinerU 图片路径不在缓存中或文件缺失")
             documents.append(
                 Document(
-                    page_content=text,
+                    page_content=text or "[图像；无文字图注]",
                     metadata={
                         "source": source,
                         "file_type": ".pdf",
@@ -258,7 +266,7 @@ class MinerUExtractor:
         healthy, reason = self.server_status()
         if not healthy:
             raise MinerUExtractionError(
-                "MinerU 服务不可用。请先运行 scripts/start_mineru_tunnel.ps1；"
+                "MinerU 不可用。请检查本地解释器或远端地址／隧道；"
                 f"健康检查详情：{reason}"
             )
 
@@ -284,6 +292,16 @@ class MinerUExtractor:
             "--image-analysis",
             "true",
         ]
+        if self.mode == "local":
+            # Dedicated environment; never install packages or download weights here.
+            candidates = [self.python_executable.parent / "mineru.exe",
+                          self.python_executable.parent / "Scripts" / "mineru.exe"] if os.name == "nt" else [self.python_executable.parent / "mineru"]
+            cli = next((p for p in candidates if p.is_file()), candidates[0])
+            if not cli.is_file():
+                temp_path.rmdir()
+                raise MinerUExtractionError("指定 Python 环境中没有 MinerU CLI，请先安装并准备本地模型。")
+            command = [str(cli),
+                       "-p", str(path), "-o", str(temp_path), "-b", "pipeline", "-d", "cuda"]
         flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             completed = subprocess.run(

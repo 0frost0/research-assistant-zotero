@@ -14,13 +14,51 @@
     </div>
     <div class="status-area">
       <span id="engineStatus" class="status offline">检查后端中</span>
-      <button id="startEngine">启动 Python 引擎</button>
-      <button id="configureEngine">引擎设置</button>
-      <button id="configureConnection">连接设置</button>
+      <button id="startEngine">启动全部服务</button>
+      <button id="configureEngine">本机启动设置</button>
+      <button id="configureConnection">高级连接设置</button>
+      <button id="configureServices">服务设置</button>
     </div>
   </header>
 
   <div id="notice" role="status" aria-live="polite"></div>
+
+  <section id="serviceConfigPanel" class="service-config" hidden="hidden">
+    <h2>服务设置</h2>
+    <p class="muted">配置用于后续问答、检索和精析。新模型首次编码所选资料可能收费。密钥留空保留原值；换 API 地址需重新填写。保存不代表连通性已验证。</p>
+    <form id="serviceConfigForm">
+      <fieldset id="serviceConfigFields">
+        <label for="serviceLlmBaseUrl">问答 API 地址</label>
+        <input id="serviceLlmBaseUrl" type="url" required="required" />
+        <label for="serviceLlmModel">问答模型名称</label>
+        <input id="serviceLlmModel" maxlength="200" required="required" />
+        <label for="serviceLlmKey">问答 API Key</label>
+        <input id="serviceLlmKey" type="password" autocomplete="new-password" />
+        <label for="serviceEmbeddingBaseUrl">Qwen 多模态嵌入 API 地址</label>
+        <input id="serviceEmbeddingBaseUrl" type="url" required="required" />
+        <label for="serviceEmbeddingModel">嵌入模型名称</label>
+        <input id="serviceEmbeddingModel" maxlength="200" required="required" />
+        <p class="muted">协议：vLLM Qwen3-VL messages embeddings。地址填写到 /v1 或完整 /v1/embeddings；模型名须与服务发布的名称一致。</p>
+        <label for="serviceEmbeddingDimension">实际输出维度</label>
+        <input id="serviceEmbeddingDimension" type="number" min="1" max="8192" value="2048" required="required" />
+        <label for="serviceEmbeddingRevision">服务模型版本（权重变更后修改）</label>
+        <input id="serviceEmbeddingRevision" value="1" maxlength="100" required="required" />
+        <label for="serviceEmbeddingKey">嵌入 API Key</label>
+        <input id="serviceEmbeddingKey" type="password" autocomplete="new-password" />
+        <label for="serviceMineruMode">MinerU 运行方式</label>
+        <select id="serviceMineruMode"><option value="remote">远端服务</option><option value="local">本地 GPU（主后端所在机器）</option></select>
+        <label for="serviceMineruPython">MinerU Python 绝对路径（留空使用后端默认环境）</label>
+        <input id="serviceMineruPython" placeholder="D:\\miniconda3\\envs\\mineru\\python.exe" />
+        <label><input id="serviceMineruAuto" type="checkbox" />同步分类后自动精析 PDF（远端模式会发送 PDF）</label>
+        <label for="serviceMineruUrl">MinerU 地址（远端方式）</label>
+        <input id="serviceMineruUrl" type="url" />
+        <label for="serviceMineruTimeout">解析超时（秒）</label>
+        <input id="serviceMineruTimeout" type="number" min="60" max="7200" value="1800" />
+        <button type="submit">保存配置</button>
+      </fieldset>
+      <button id="cancelServiceConfig" type="button">关闭</button>
+    </form>
+  </section>
 
   <main>
     <aside>
@@ -44,22 +82,30 @@
         <div class="commands">
           <button id="archiveBase" disabled="disabled">归档</button>
           <button id="exportBackup">导出备份</button>
+          <button id="parseSelected">精析所选库</button>
+          <button id="refreshParsing">解析任务</button>
+          <button id="qaHistory">问答历史</button>
+          <button id="newConversation">新会话</button>
           <button id="writeBack">写回 Zotero</button>
         </div>
       </div>
 
+      <div id="parsingStatus" class="muted" aria-live="polite"></div>
       <form id="searchForm">
         <label for="query">检索问题</label>
         <div class="search-row">
           <input id="query" maxlength="2000" autocomplete="off" required="required"
                  placeholder="输入研究问题或关键词" />
           <button id="searchButton" class="primary" type="submit">检索</button>
+          <button id="askButton" class="primary" type="submit">文献与笔记分开回答</button>
+          <button id="compareButton" class="primary" type="button" disabled="disabled">多文献对照</button>
         </div>
         <div class="segments" role="group" aria-label="检索范围">
           <label><input type="radio" name="scope" value="both" checked="checked" /><span>文献与笔记</span></label>
           <label><input type="radio" name="scope" value="original" /><span>仅文献</span></label>
           <label><input type="radio" name="scope" value="notes" /><span>仅笔记</span></label>
         </div>
+        <p id="scopeHint" class="muted">论文原文与个人笔记分开回答；最多补检索一次。点击后将证据发送至已配置模型。</p>
       </form>
 
       <nav class="tabs" aria-label="知识库视图">
@@ -70,33 +116,45 @@
 
       <section id="resultsView">
         <p id="resultMeta" class="muted"></p>
+        <button id="cancelAskButton" type="button" hidden="hidden">停止问答</button>
         <div id="results"><p class="empty">暂无检索结果</p></div>
       </section>
 
       <section id="membersView" hidden="hidden">
         <div class="table-wrap">
           <table>
-            <thead><tr><th>标题</th><th>类型</th><th>版本</th></tr></thead>
+            <thead><tr><th>对照</th><th>标题</th><th>类型</th><th>版本</th></tr></thead>
             <tbody id="members"></tbody>
           </table>
         </div>
       </section>
 
       <section id="notesView" hidden="hidden">
+        <article id="noteReference" class="note-row" hidden="hidden" aria-live="polite"></article>
         <div class="notes-layout">
           <div>
             <div class="section-heading">
               <h3>专题笔记</h3>
-              <button id="newNote" type="button">新建</button>
+              <div class="note-actions"><label class="check"><input id="showArchivedNotes" type="checkbox" />显示已归档</label><label for="noteTypeFilter">类型</label>
+                <select id="noteTypeFilter">
+                  <option value="all">全部</option>
+                  <option value="understanding">理解</option>
+                  <option value="question">疑问</option>
+                  <option value="idea">想法</option>
+                </select>
+                <button id="newNote" type="button">新建</button></div>
             </div>
             <div id="noteList"></div>
           </div>
           <form id="noteForm" class="note-editor" hidden="hidden">
             <h3 id="noteEditorTitle">新建笔记</h3>
+            <label for="noteType">类型</label>
+            <select id="noteType"><option value="understanding">理解</option><option value="question">疑问</option><option value="idea">想法</option></select>
             <label for="noteTitle">标题</label>
             <input id="noteTitle" maxlength="500" />
             <label for="noteBody">正文</label>
             <textarea id="noteBody" rows="12" maxlength="100000" required="required"></textarea>
+            <div id="noteSources" class="muted"></div>
             <label class="check"><input id="noteConfirmed" type="checkbox" checked="checked" />已确认，可用于检索</label>
             <div class="editor-actions">
               <button id="cancelNote" type="button">取消</button>

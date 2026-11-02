@@ -8,6 +8,7 @@ var ResearchBridge = {
   workbench: null,
   engineProcess: null,
   engineStarting: null,
+  tunnelProcess: null,
 
   pref(name, fallback = "") {
     return Zotero.Prefs.get(this.prefix + name, true) ?? fallback;
@@ -26,12 +27,13 @@ var ResearchBridge = {
   async response(path, body, method = "POST") {
     const window = Zotero.getMainWindow();
     const controller = new window.AbortController();
-    const timer = window.setTimeout(() => controller.abort(), 90000);
+    const timer = window.setTimeout(() => controller.abort(), path === "status" ? 3000 : ["ask", "compare"].includes(path) ? 195000 : 90000);
     try {
       const binary = ArrayBuffer.isView(body);
       const response = await window.fetch(this.endpoint() + "/api/knowledge/" + path, {
         method, headers: {
           Authorization: "Bearer " + this.pref("token"),
+          "X-Research-Connection": this.pref("connection"),
           "Content-Type": binary ? "application/pdf" : "application/json",
         },
         body: body === undefined ? undefined : binary ? body : JSON.stringify(body),
@@ -71,15 +73,17 @@ var ResearchBridge = {
     menu.setAttribute("label", "科研知识库");
     const popup = doc.createXULElement("menupopup");
     for (const [label, action] of [
-      ["配置后端连接", () => this.configure(window)],
+      ["本机启动设置", () => this.configureEngine(window)],
+      ["启动全部服务", () => this.startAllServices(window)],
+      ["高级：手动连接后端", () => this.configure(window)],
       ["同步当前分类", () => this.sync(window)],
       ["打开知识库", () => this.open()],
       ["将知识库笔记新增到 Zotero", () => this.writeNotes(window)],
     ]) {
       const item = doc.createXULElement("menuitem");
       item.setAttribute("label", label);
-      item.addEventListener("command", () => Promise.resolve().then(action).catch(() =>
-        window.alert("操作未完成。请检查连接、令牌、所选分类和附件是否已下载；已有笔记未被覆盖。")));
+      item.addEventListener("command", () => Promise.resolve().then(action).catch(error =>
+        window.alert("科研助手：" + (error.message || String(error)))));
       popup.append(item);
     }
     menu.append(popup);
@@ -99,6 +103,8 @@ var ResearchBridge = {
       this.engineProcess.kill(1000).catch(error => Zotero.logError(error));
     }
     this.engineProcess = null;
+    if (this.tunnelProcess) this.tunnelProcess.kill(1000).catch(error => Zotero.logError(error));
+    this.tunnelProcess = null;
   },
   async configure(window = Zotero.getMainWindow()) {
     const endpoint = window.prompt("科研助手后端地址", this.pref("endpoint", "http://127.0.0.1:8765"));
@@ -121,27 +127,28 @@ var ResearchBridge = {
     }
   },
   async configureEngine(window = Zotero.getMainWindow()) {
-    const executable = window.prompt(
-      "Python 解释器或已打包科研引擎的完整路径",
-      this.pref("engineExecutable")
-    );
-    if (executable === null) return false;
-    const script = window.prompt(
-      "Python 启动脚本的完整路径；如果上一步选择的是独立 EXE，请留空",
-      this.pref("engineScript")
-    );
-    if (script === null) return false;
-    const workdir = window.prompt(
-      "科研助手工作目录",
-      this.pref("engineWorkdir")
-    );
-    if (workdir === null) return false;
-    this.setPref("engineExecutable", executable.trim());
-    this.setPref("engineScript", script.trim());
-    this.setPref("engineWorkdir", workdir.trim());
-    this.setPref("autoStartEngine", window.confirm("以后启动 Zotero 时自动启动该 Python 引擎？"));
-    this.setPref("stopEngineOnExit", window.confirm("退出 Zotero 时停止由插件启动的引擎？"));
-    return true;
+    if (this.settingsWindow && !this.settingsWindow.closed) {
+      this.settingsWindow.focus();
+      return this.settingsResult;
+    }
+    this.settingsResult = new Promise(resolve => {
+      this.settingsWindow = window.openDialog(
+        "chrome://researchassistant/content/engine-settings.xhtml", "research-assistant-settings",
+        "chrome,centerscreen,resizable,width=720,height=760", {bridge: this, done: resolve});
+    });
+    return this.settingsResult;
+  },
+  async saveEngineSettings(values) {
+    for (const key of ['engineExecutable', 'engineScript', 'engineWorkdir']) {
+      if (!values[key] || !await IOUtils.exists(values[key])) throw new Error('路径不存在：' + key);
+    }
+    if (values.qwenSshHost && !/^[A-Za-z0-9][A-Za-z0-9_.@-]*$/.test(values.qwenSshHost)) throw new Error('SSH 别名格式无效。');
+    if (values.qwenServiceUnit && (!values.qwenSshHost || !/^[A-Za-z0-9][A-Za-z0-9_.-]*\.service$/.test(values.qwenServiceUnit))) throw new Error('远端服务名须以 .service 结尾，并填写 SSH 别名。');
+    if (values.sshExecutable && !await IOUtils.exists(values.sshExecutable)) throw new Error('SSH 程序路径不存在。');
+    for (const key of ['engineExecutable', 'engineScript', 'engineWorkdir', 'qwenSshHost', 'qwenServiceUnit', 'autoStartEngine', 'stopEngineOnExit']) this.setPref(key, values[key]);
+    this.setPref('sshExecutable', values.sshExecutable || '');
+    this.setPref("endpoint", "http://127.0.0.1:8765");
+    await this.readLocalToken();
   },
   async backendStatus() {
     try {
@@ -154,7 +161,57 @@ var ResearchBridge = {
     const status = await this.backendStatus();
     if (status.connected) return status;
     if (!force && !this.pref("autoStartEngine", false)) return status;
-    return this.startEngine();
+    return this.startAllServices();
+  },
+  async readLocalToken() {
+    const root = this.pref("engineWorkdir").replace(/[\\/]+$/, "");
+    if (!root || this.endpoint() !== "http://127.0.0.1:8765") return;
+    const path = PathUtils.join(root, ".data", "zotero", "connection-token");
+    if (await IOUtils.exists(path)) this.setPref("token", (await IOUtils.readUTF8(path)).trim());
+  },
+  async resolveSshExecutable() {
+    const configured = this.pref('sshExecutable').trim();
+    if (configured) {
+      if (await IOUtils.exists(configured)) return configured;
+      throw new Error('SSH 程序不存在，请在本机启动设置修正路径：' + configured);
+    }
+    // Mozilla does not necessarily apply Windows PATHEXT when searching PATH.
+    for (const name of ['ssh.exe', 'ssh']) {
+      try { return await Subprocess.pathSearch(name); } catch (_) {}
+    }
+    const windows = Services.env?.get('SystemRoot');
+    if (windows) {
+      const candidate = PathUtils.join(windows, 'System32', 'OpenSSH', 'ssh.exe');
+      if (await IOUtils.exists(candidate)) return candidate;
+    }
+    throw new Error('找不到 OpenSSH。请在本机启动设置填写 ssh.exe 的完整路径。');
+  },
+  async startAllServices(window = Zotero.getMainWindow()) {
+    if (this.allStarting) return this.allStarting;
+    this.allStarting = (async () => {
+      if (!this.pref("engineExecutable") && !await this.configureEngine(window)) throw new Error("已取消本机启动设置，服务尚未启动。");
+      const root = this.pref("engineWorkdir").replace(/[\\/]+$/, "");
+      if (!root) throw new Error("请先填写本机项目目录。");
+      if (this.endpoint() !== "http://127.0.0.1:8765") throw new Error("请先用本机启动设置切换到本地后端。");
+      const args = [PathUtils.join(root, "scripts", "prepare_desktop_services.py")];
+      const host = this.pref("qwenSshHost"), unit = this.pref("qwenServiceUnit");
+      const ssh = host ? await this.resolveSshExecutable() : null;
+      if (host) args.push("--ssh-host", host);
+      if (ssh) args.push("--ssh-executable", ssh);
+      if (unit) args.push("--qwen-unit", unit);
+      const setup = await Subprocess.call({command: this.pref("engineExecutable"), arguments: args, workdir: root, stderr: "stdout"});
+      const output = await setup.stdout.readString();
+      const result = await setup.wait();
+      if (result.exitCode !== 0) throw new Error(output.slice(-1500) || "依赖启动失败。");
+      if (host && (!this.tunnelProcess || this.tunnelProcess.exitCode !== null)) {
+        this.tunnelProcess = await Subprocess.call({command: ssh, arguments: ["-N", "-L", "127.0.0.1:30001:127.0.0.1:30001", "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=3", host], stderr: "stdout"});
+        this.tunnelProcess.stdout.readString().catch(() => {});
+      }
+      await this.readLocalToken();
+      const status = await this.backendStatus();
+      return status.connected ? status : this.startEngine();
+    })();
+    try { return await this.allStarting; } finally { this.allStarting = null; }
   },
   async startEngine() {
     if (this.engineStarting) return this.engineStarting;
@@ -168,10 +225,12 @@ var ResearchBridge = {
         command: executable,
         arguments: arguments_,
         workdir: workdir || null,
-        stderr: "pipe",
+        stderr: "stdout",
       });
-      for (let attempt = 0; attempt < 30; attempt++) {
+      this.engineProcess.stdout.readString().catch(() => {});
+      for (let attempt = 0; attempt < 60; attempt++) {
         await new Promise(resolve => Zotero.getMainWindow().setTimeout(resolve, 1000));
+        await this.readLocalToken();
         const status = await this.backendStatus();
         if (status.connected) return status;
         if (this.engineProcess.exitCode !== null) {
@@ -275,6 +334,7 @@ var ResearchBridge = {
     }
   },
   open(query = "") {
+    if (typeof query !== "string") query = "";
     if (this.workbench && !this.workbench.closed) {
       this.workbench.focus();
       this.workbench.ResearchAssistantWorkbench?.setQuery(query);
@@ -287,6 +347,7 @@ var ResearchBridge = {
       "chrome,centerscreen,resizable",
       args
     );
+    if (!this.workbench) throw new Error("知识库窗口未创建，请重新安装当前 XPI 后重启 Zotero。");
     return this.workbench;
   },
   openSource(url) {

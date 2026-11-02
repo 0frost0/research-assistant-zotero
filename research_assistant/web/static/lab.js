@@ -130,11 +130,11 @@ function renderCase() {
     })); controls.append(grade, note, save); entry.append(controls); detail.append(entry);
   });
 }
-function renderAll() { renderMetrics(); renderCases(); renderCase(); }
+function renderAll() { if (run) $("exportApproved").disabled = !run.approvals.length; renderMetrics(); renderCases(); renderCase(); }
 async function loadRun(id) {
   run = await api("/api/evaluations/" + encodeURIComponent(id)); caseId = run.cases[0]?.id;
   $("runMeta").textContent = `${run.dataset_id} · ${run.created_at} · ${run.model.split("@")[0]} · ${run.dimension} 维 · ${run.settings?.retrieval_policy?.version || "legacy-v1-cap3"} · ${run.duration_seconds}s`;
-  $("exportRun").disabled = false; renderAll();
+  $("exportRun").disabled = false; $("exportApproved").disabled = !run.approvals.length; renderAll();
 }
 async function refreshRuns(loadLatest = false) {
   const data = await api("/api/evaluations");
@@ -192,4 +192,12 @@ $("tableNext").addEventListener("click", action(async () => { tableOffset += 50;
 $("sqlForm").addEventListener("submit", action(async e => { e.preventDefault(); const result = await api("/api/tables/sql", {sql: $("sql").value}); $("sqlResults").replaceChildren(grid(result.columns, result.rows)); $("sqlState").textContent = `${result.rows.length} 行${result.truncated ? " · 已截断" : ""}`; }));
 $("cellSql").addEventListener("click", () => { if (currentTable) $("sql").value = `SELECT row_index, column_index, row_span, col_span, text, numeric_value\nFROM table_cells\nWHERE table_id = '${currentTable.table_id}'\nORDER BY row_index, column_index`; });
 $("exportRun").addEventListener("click", () => { const blob = new Blob([JSON.stringify(run, null, 2)], {type: "application/json"}), url = URL.createObjectURL(blob), a = el("a"); a.href = url; a.download = `retrieval-${run.run_id}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); });
+$("exportApproved").addEventListener("click", action(async () => {
+  if (!run || !run.approvals.length) throw new Error("暂无人工确认的 case");
+  const dataset = await api("/api/evaluations/" + encodeURIComponent(run.run_id) + "/dataset");
+  const blob = new Blob([JSON.stringify(dataset, null, 2)], {type: "application/json"}), url = URL.createObjectURL(blob), a = el("a");
+  a.href = url; a.download = `retrieval-approved-${run.run_id}.json`; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  notice(`已导出 ${dataset.cases.length} 个仅经人工确认的测试 case`);
+}));
 action(async () => { await refreshRuns(true); if (params.get("tab") === "tables") await switchTab(true); })();

@@ -5,6 +5,17 @@
   background: #f5f7f7;
 }
 
+.answer-panel { background: #eef6f2; border: 1px solid #b6d5c7; border-radius: 8px; padding: 18px; margin-bottom: 18px; }
+.qa-feedback { border-top: 1px solid #b6d5c7; margin-top: 10px; padding-top: 8px; }
+.qa-feedback button { margin: 0 6px 4px 0; }
+.answer-claim { margin: 16px 0; line-height: 1.7; }
+.answer-section-title { margin: 18px 0 4px; padding-top: 10px; border-top: 1px solid #b6d5c7; }
+.answer-panel blockquote { border-left: 3px solid #8aafa1; margin: 8px 0; padding-left: 12px; }
+.answer-panel details { margin-top: 12px; font-size: 13px; }
+.history-row { padding: 12px 0; border-bottom: 1px solid #b6d5c7; }
+.history-row p:first-child { margin-bottom: 5px; font-weight: 600; }
+@media (prefers-color-scheme: dark) { .answer-panel { background: #1d322b; border-color: #43685a; } }
+
 * {
   box-sizing: border-box;
   letter-spacing: 0;
@@ -131,6 +142,12 @@ header p {
   background: #fff3dc;
 }
 
+#cancelAskButton {
+  margin: 0 20px 10px;
+  color: #8b3f2f;
+  border-color: #d5a79c;
+}
+
 main {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
@@ -153,7 +170,8 @@ aside {
 .section-heading,
 .workspace-heading,
 .commands,
-.editor-actions {
+.editor-actions,
+.note-actions {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -246,8 +264,17 @@ textarea {
 
 .search-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 76px;
+  grid-template-columns: minmax(0, 1fr) repeat(3, max-content);
   gap: 9px;
+}
+
+#compareButton {
+  background: #315d82;
+  border-color: #315d82;
+}
+
+#compareButton:hover {
+  background: #244967;
 }
 
 .segments {
@@ -378,10 +405,22 @@ td {
   margin-bottom: 13px;
 }
 
+#noteSources {
+  margin: -4px 0 13px;
+  padding: 8px;
+  border-left: 3px solid #d2a44d;
+  background: #fff8e9;
+  white-space: pre-wrap;
+}
+
 .editor-actions {
   justify-content: flex-end;
   margin-top: 16px;
 }
+
+.service-config { margin: 16px 24px; padding: 20px; border: 1px solid #889898; border-radius: 12px; }
+.service-config fieldset { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(240px, 2fr); gap: 12px; border: 0; }
+@media (max-width: 700px) { .service-config fieldset { grid-template-columns: 1fr; } }
 
 [hidden] {
   display: none !important;

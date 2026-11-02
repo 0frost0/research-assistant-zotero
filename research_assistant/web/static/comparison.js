@@ -122,6 +122,21 @@ function renderComparison(run) {
   if (result) {
     resultPanel.append(cmpElement("p", result.summary));
     [...result.warnings, ...result.limitations].forEach(w => resultPanel.append(cmpElement("p", w, "comparison-limit")));
+    if (result.profiles?.length) {
+      const section = appendResultSection("按论文整理的研究条件", "comparison-papers");
+      result.profiles.forEach(profile => {
+        const details = document.createElement("details");
+        details.className = "comparison-details";
+        details.append(cmpElement("summary", result.source_titles?.[profile.source] || profile.source));
+        [["研究对象", profile.population], ["方法", profile.method], ["数据集/设置", profile.setting],
+          ["指标", profile.metric], ["结果", profile.result], ["适用条件", profile.condition],
+          ["局限", profile.limitation]].forEach(([label, value]) => {
+          if (value) details.append(cmpElement("p", label + "：" + value));
+        });
+        details.append(cmpReferences(profile.evidence_ids || []));
+        section.append(details);
+      });
+    }
     if (result.comparisons.length) {
       const section = appendResultSection("对照结果 · AI 复核支持", "comparison-table-wrap");
       const table = document.createElement("table");

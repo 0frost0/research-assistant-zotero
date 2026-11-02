@@ -9,6 +9,7 @@ import json
 import os
 import sys
 import threading
+import secrets
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -18,7 +19,7 @@ from PIL import Image
 
 MODEL_ID = "Qwen/Qwen3-VL-Embedding-2B"
 ROOT = Path(__file__).resolve().parent
-MODEL_PATH = ROOT / "models" / "Qwen3-VL-Embedding-2B"
+MODEL_PATH = Path(os.getenv("QWEN_MODEL_PATH", str(ROOT / "models" / "Qwen3-VL-Embedding-2B")))
 sys.path.insert(0, str(MODEL_PATH))
 from scripts.qwen3_vl_embedding import Qwen3VLEmbedder
 
@@ -52,6 +53,34 @@ def fingerprint() -> str:
 
 
 class Handler(BaseHTTPRequestHandler):
+    def messages_input(self, body):
+        """Compatibility facade, not a vLLM deployment; one conversation = one vector."""
+        if body.get("model") != MODEL_ID or body.get("encoding_format", "float") != "float":
+            raise ValueError("Unsupported model/encoding")
+        messages = body.get("messages")
+        if not isinstance(messages, list) or [m.get("role") for m in messages] != ["system", "user", "assistant"]:
+            raise ValueError("Expected system/user/assistant messages")
+        system = messages[0]["content"]
+        if len(system) != 1 or system[0].get("type") != "text":
+            raise ValueError("Expected one instruction")
+        item = {"instruction": system[0]["text"]}
+        parts = messages[1]["content"]
+        if not isinstance(parts, list) or not 1 <= len(parts) <= 2:
+            raise ValueError("Expected text and/or one image")
+        for part in parts:
+            if part.get("type") == "text" and "text" not in item:
+                if part["text"]:
+                    item["text"] = part["text"]
+            elif part.get("type") == "image_url" and "image_base64" not in item:
+                url = part["image_url"]["url"]
+                header, data = url.split(",", 1)
+                if header not in {"data:image/png;base64", "data:image/jpeg;base64", "data:image/webp;base64"}:
+                    raise ValueError("Only embedded images supported")
+                item["image_base64"] = data
+            else:
+                raise ValueError("Unsupported message part")
+        return [item]
+
     def log_message(self, _format, *_args):
         pass  # Do not log research text or image payloads.
 
@@ -68,15 +97,22 @@ class Handler(BaseHTTPRequestHandler):
                      PROFILE if self.path == "/health" else {"error": "Not found"})
 
     def do_POST(self):
-        if self.path != "/embed":
+        compatible = self.path == "/v1/embeddings"
+        if self.path not in {"/embed", "/v1/embeddings"}:
             self.respond(404, {"error": "Not found"})
             return
+        if compatible:
+            token_file = Path(os.getenv("EMBEDDING_API_KEY_FILE", str(ROOT / "api-key")))
+            key = os.getenv("EMBEDDING_API_KEY", "") or (token_file.read_text().strip() if token_file.is_file() else "")
+            if not key or not secrets.compare_digest(self.headers.get("Authorization", ""), "Bearer " + key):
+                self.respond(401, {"error": "Embedding API key missing or invalid"})
+                return
         try:
             size = int(self.headers.get("Content-Length", "0"))
             if not 0 < size <= 24 * 1024 * 1024:
                 raise ValueError("Request body must be between 1 byte and 24 MiB")
             body = json.loads(self.rfile.read(size))
-            items = body.get("inputs")
+            items = self.messages_input(body) if compatible else body.get("inputs")
             if not isinstance(items, list) or not 1 <= len(items) <= 4:
                 raise ValueError("Expected 1 to 4 inputs")
             inputs = []
@@ -116,7 +152,10 @@ class Handler(BaseHTTPRequestHandler):
             vectors = EMBEDDER.process(inputs).float().cpu().tolist()
             if len(vectors) != len(inputs) or any(len(v) != 2048 for v in vectors):
                 raise ValueError("Invalid embedding shape")
-            self.respond(200, {**PROFILE, "vectors": vectors})
+            self.respond(200, {"object": "list", "model": MODEL_ID,
+                              "data": [{"object": "embedding", "index": i, "embedding": v}
+                                       for i, v in enumerate(vectors)]}
+                         if compatible else {**PROFILE, "vectors": vectors})
         except Exception as exc:
             print(f"Embedding failed: {type(exc).__name__}", flush=True)
             self.respond(500, {"error": "Embedding inference failed; input was not indexed"})

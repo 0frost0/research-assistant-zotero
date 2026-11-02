@@ -203,6 +203,43 @@ class EvaluationTests(unittest.TestCase):
             with self.assertRaises(ValueError): store.judge("r1", {"case_id": "C1", "point_id": "unknown", "grade": 3, "reviewer": "test-fixture"})
             with self.assertRaises(ValueError): store.judge("r1", {"case_id": "C1", "point_id": "t1", "grade": True, "reviewer": "test-fixture"})
 
+    def test_export_approved_dataset_excludes_run_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = EvaluationStore(Path(tmp) / "eval.sqlite3")
+            c = fixture_case(); ranks = [hit("t1")]
+            c["rankings"] = {"raw": ranks, "displayed": ranks}
+            c["metrics"] = {m: score_ranking(c, ranks) for m in c["rankings"]}
+            run = {"run_id": "export-run", "created_at": "today", "dataset_id": "draft-v1",
+                   "dataset_hash": "v1", "corpus": {"evidence_sha256": "abc"}, "model": "fixture",
+                   "cases": [c], "judgments": [{"case_id": "C1", "point_id": "t1", "grade": 3}],
+                   "ai_review": {"annotation_origin": "ai_assisted"}}
+            store.save(run)
+            with self.assertRaisesRegex(ValueError, "No human-approved"):
+                store.export_approved_dataset("export-run")
+            store.judge("export-run", {"case_id": "C1", "action": "approve_gold", "reviewer": "human"})
+            dataset = store.export_approved_dataset("export-run")
+            self.assertEqual(dataset["source_run_id"], "export-run")
+            self.assertEqual(dataset["cases"][0]["split"], "test")
+            self.assertEqual(dataset["cases"][0]["id"], "C1")
+            self.assertNotIn("rankings", dataset["cases"][0])
+            self.assertNotIn("judgments", dataset)
+            self.assertNotIn("ai_review", dataset)
+
+    def test_export_route_returns_only_human_approved_cases(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); (root / ".data").mkdir();
+            store = EvaluationStore(root / ".data/evaluations.sqlite3")
+            c = fixture_case(); c["rankings"] = {"raw": [hit("t1")], "displayed": [hit("t1")]}
+            c["metrics"] = {m: score_ranking(c, ranks) for m, ranks in c["rankings"].items()}
+            store.save({"run_id": "api-run", "created_at": "today", "dataset_id": "draft-v1",
+                        "dataset_hash": "v1", "corpus": {}, "cases": [c]})
+            store.judge("api-run", {"case_id": "C1", "action": "approve_gold", "reviewer": "human"})
+            routes = make_lab_routes(root, lambda _: None, lambda source: root / source)
+            with TestClient(Starlette(routes=routes)) as client:
+                response = client.get("/api/evaluations/api-run/dataset")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["cases"][0]["split"], "test")
+
     def test_pure_image_omits_empty_text_and_mixed_is_one_input(self):
         model = RemoteQwenEmbeddings.__new__(RemoteQwenEmbeddings)
         requests = []

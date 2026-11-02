@@ -83,6 +83,59 @@ def summarize(spans, wall_ms):
             "peak_model_concurrency": peak}
 
 
+def summarize_qa_trace(trace):
+    """Return a content-free observability record for the bounded QA path.
+
+    ``knowledge.qa`` keeps a user-facing trace with queries and evidence so the
+    Zotero panel can explain what happened.  The durable ``qa_runs`` table must
+    not persist those research contents.  This projection keeps only operational
+    dimensions useful for regression and incident analysis.
+    """
+    if not isinstance(trace, dict):
+        return {"version": 1, "workflow_version": "qa-observability-v1",
+                "stages": [], "calls": []}
+    stages = []
+    for step in trace.get("steps", []) or []:
+        if not isinstance(step, dict):
+            continue
+        item = {"stage": step.get("stage"), "round": step.get("round"),
+                "elapsed_ms": step.get("elapsed_ms")}
+        for key in ("candidates", "selected", "draft_claims", "accepted",
+                    "question_relevant", "reused"):
+            if key in step:
+                item[key] = step[key]
+        stages.append(item)
+    calls = []
+    known_tokens = 0
+    for call in trace.get("calls", []) or []:
+        if not isinstance(call, dict):
+            continue
+        item = {"role": call.get("role"), "status": call.get("status"),
+                "elapsed_ms": call.get("elapsed_ms"),
+                "usage": call.get("usage", "unknown")}
+        if call.get("error_type"):
+            item["error_type"] = call["error_type"]
+        if type(call.get("input_tokens")) is int and type(call.get("output_tokens")) is int:
+            item["input_tokens"] = call["input_tokens"]
+            item["output_tokens"] = call["output_tokens"]
+            known_tokens += call["input_tokens"] + call["output_tokens"]
+        calls.append(item)
+    return {
+        "version": 1,
+        "workflow_version": "qa-observability-v1",
+        "scope": trace.get("scope", "original"),
+        "model_calls": trace.get("model_calls", len(calls)),
+        "retrieval_calls": trace.get("retrieval_calls", 0),
+        "rewrite_rounds": trace.get("rewrite_rounds", 0),
+        "correction_rounds": trace.get("correction_rounds", 0),
+        "elapsed_ms": trace.get("elapsed_ms"),
+        "unknown_usage_calls": trace.get("unknown_usage_calls", 0),
+        "known_tokens": known_tokens if calls and known_tokens else None,
+        "stages": stages,
+        "calls": calls,
+    }
+
+
 class ExecutionTrace:
     def __init__(self, publish=lambda snapshot: None, *, clock=time.perf_counter):
         self.clock, self.publish = clock, publish
