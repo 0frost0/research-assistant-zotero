@@ -158,7 +158,14 @@ class LiteratureIndex:
                 from research_assistant.retrieval.embeddings.remote_embeddings import RemoteQwenEmbeddings
                 from research_assistant.retrieval.unified_index import UnifiedMultimodalIndex
 
-                unified_embeddings = RemoteQwenEmbeddings()
+                from research_assistant.core.service_context import embedding_config
+                config = embedding_config()
+                if config:
+                    from research_assistant.retrieval.embeddings.api_embeddings import QwenAPIEmbeddings
+                    unified_embeddings = QwenAPIEmbeddings(
+                        config, cache_path=getattr(self, "embedding_cache_path", None))
+                else:
+                    unified_embeddings = RemoteQwenEmbeddings()
                 unified_index = UnifiedMultimodalIndex(
                     embeddings=unified_embeddings,
                     collection_base=collection_base,

@@ -16,10 +16,44 @@ from tests.test_reading_memory import pdf
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--port", type=int, default=8771)
+parser.add_argument("--qa-scripted", action="store_true", help="Deterministic model double, not a quality evaluation")
 args = parser.parse_args()
 temporary = tempfile.TemporaryDirectory(prefix="research-knowledge-fixture-")
 root = Path(temporary.name)
 api = KnowledgeAPI(root, token="synthetic-acceptance-token", backend="tfidf")
+if args.qa_scripted:
+    from research_assistant.knowledge.qa import CombinedQA, EvidenceQA, MemoryQA
+
+    async def scripted(role, payload, timeout):
+        if role == "review":
+            return {"question_relevant": True,
+                    "verdicts": [{"claim_index": i, "supported": True, "reason": "fixture"}
+                                 for i in range(len(payload["claims"]))]}, {"input_tokens": 10, "output_tokens": 10}
+        candidates = payload["evidence"]
+        return {"claims": [{"text": "合成资料：检索证据需要核验。", "citations": [
+            {"evidence_id": candidates[0]["evidence_id"], "quote": candidates[0]["quote"]}]}] if candidates else []}, {"input_tokens": 10, "output_tokens": 10}
+
+    class FixtureQA:
+        """Allow the native fixture to exercise a failed durable job safely."""
+
+        def __init__(self, delegate):
+            self.delegate = delegate
+            self.lock = delegate.lock
+
+        async def ask(self, data):
+            if data.get("query") == "fixture failure":
+                raise RuntimeError("fixture failure")
+            return await self.delegate.ask(data)
+
+    api._qa = FixtureQA(EvidenceQA(api.service, caller=scripted, configured=lambda: True))
+    # The production ``both`` path deliberately uses separate answer objects;
+    # give both halves the same deterministic fixture caller without enabling
+    # any real model or network request.
+    api._combined_qa = CombinedQA(
+        api.service,
+        evidence=EvidenceQA(api.service, caller=scripted, configured=lambda: True),
+        memory=MemoryQA(api.service, caller=scripted, configured=lambda: True),
+    )
 source = root / "synthetic.pdf"
 pdf(source)
 content = source.read_bytes()

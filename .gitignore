@@ -44,3 +44,4 @@ deployment/zotero/dist/
 .idea/
 .DS_Store
 Thumbs.db
+deployment/embedding/api-key

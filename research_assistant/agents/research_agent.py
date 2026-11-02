@@ -83,21 +83,31 @@ def build_agent(
     )
 
 
-def build_chat_model() -> ChatOpenAI:
+def build_chat_model(*, timeout: float | None = None, max_tokens: int | None = None,
+                     model_name: str | None = None, disable_thinking: bool = False,
+                     reasoning_effort: str | None = None) -> ChatOpenAI:
     """问答和项目规划共用连接、思考模式与超时配置。"""
-    base_url = os.environ["OPENAI_BASE_URL"]
+    from research_assistant.core.service_context import llm_config
+    config = llm_config()
+    base_url = config["base_url"]
     model_options = {}
     if "deepseek.com" in base_url.lower():
         # DeepSeek 思考模式与强制结构化函数调用不兼容。
         model_options["extra_body"] = {"thinking": {"type": "disabled"}}
+    if max_tokens is not None:
+        model_options["max_tokens"] = max_tokens
+    if disable_thinking:
+        model_options["extra_body"] = {"thinking": {"type": "disabled"}}
+    if reasoning_effort:
+        model_options["reasoning_effort"] = reasoning_effort
 
     return ChatOpenAI(
-        model=os.environ["OPENAI_MODEL"],
-        api_key=os.environ["OPENAI_API_KEY"],
+        model=model_name or config["model"],
+        api_key=config["api_key"],
         base_url=base_url,
         temperature=0,
         # 单次模型请求也必须有上限，避免网络半开连接长期占住网页请求。
-        timeout=float(os.getenv("RESEARCH_ASSISTANT_MODEL_TIMEOUT", "30")),
+        timeout=timeout if timeout is not None else float(os.getenv("RESEARCH_ASSISTANT_MODEL_TIMEOUT", "30")),
         # 连接失败应尽快返回清晰错误；需要重试时由上层按错误类型控制。
         max_retries=0,
         **model_options,

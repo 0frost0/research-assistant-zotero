@@ -132,9 +132,19 @@ def make_lab_routes(root: Path, get_index, safe_library_path):
         except (ValueError, TypeError) as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
 
+    async def evaluation_dataset(request):
+        try:
+            dataset = await run_in_threadpool(
+                evaluations.export_approved_dataset, request.path_params["run_id"]
+            )
+            return JSONResponse(dataset)
+        except (ValueError, TypeError) as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
     return [Route("/lab", home), Route("/api/tables", table_list),
             Route("/api/tables/sql", table_sql, methods=["POST"]),
             Route("/api/tables/{table_id}/image", table_image), Route("/api/tables/{table_id}", table_detail),
             Route("/api/document", pdf), Route("/api/evaluations", evaluation_state),
             Route("/api/evaluations", evaluation_start, methods=["POST"]),
+            Route("/api/evaluations/{run_id}/dataset", evaluation_dataset),
             Route("/api/evaluations/{run_id}", evaluation_run, methods=["GET", "POST"])]

@@ -102,6 +102,25 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["comparisons"], [])
             self.assertEqual(result["calls"], 3)
 
+    async def test_study_profiles_are_kept_only_with_same_paper_evidence(self):
+        async def caller(role, payload):
+            draft = await fixture_caller(role, payload)
+            if role == "synthesizer":
+                draft["profiles"] = [
+                    {"source": "paper1.txt", "population": "200 人", "method": "随机试验",
+                     "setting": "12 个月", "metric": "死亡率", "result": "无改善",
+                     "condition": "仅适用于当前样本", "limitation": "当前片段未覆盖长期随访",
+                     "evidence_ids": ["D1E1"]},
+                    {"source": "paper2.txt", "population": "500 人", "method": "观察性研究",
+                     "setting": "24 个月", "metric": "住院率", "result": "改善",
+                     "condition": "相关性结果", "limitation": "不能推断因果",
+                     "evidence_ids": ["D1E1"]},
+                ]
+            return draft
+        result = await ComparisonWorkflow(caller).run("compare", documents())
+        self.assertEqual(len(result["profiles"]), 1)
+        self.assertEqual(result["profiles"][0]["source"], "paper1.txt")
+
     async def test_review_missing_duplicate_rejection_and_timeout_fail_closed(self):
         for mode in ("missing", "duplicate", "unsupported", "timeout", "malformed"):
             async def caller(role, payload):

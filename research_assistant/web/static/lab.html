@@ -13,7 +13,7 @@
     <nav class="lab-tabs" aria-label="视图"><button id="evalTab" aria-pressed="true">多模态评测</button><button id="tableTab" aria-pressed="false">结构化表格</button></nav>
     <p id="notice" role="status" aria-live="polite"></p>
     <section id="evaluationView">
-      <div class="toolbar"><button id="runEval">运行评测</button><label>历史运行 <select id="runSelect"></select></label><button id="exportRun" disabled>导出结果</button><span id="jobState"></span></div>
+      <div class="toolbar"><button id="runEval">运行评测</button><label>历史运行 <select id="runSelect"></select></label><button id="exportRun" disabled>导出结果</button><button id="exportApproved" disabled title="只包含人工确认的 case">导出已确认测试集</button><span id="jobState"></span></div>
       <p id="runMeta" class="muted"></p>
       <div id="policyComparison"></div>
       <div class="toolbar"><label>标注范围 <select id="metricScope"><option value="draft_development">开发集草案</option><option value="human_approved_development">人工确认的开发集</option><option value="self_match_probe">自匹配功能检查</option></select></label><label>排名 <select id="rankingMode"><option value="displayed">网页显示排名</option><option value="raw">原始向量排名</option></select></label></div>

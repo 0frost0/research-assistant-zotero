@@ -1,4 +1,4 @@
-param([int]$LocalPort = 8765)
+param([int]$LocalPort = 8765, [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._-]*$')][string]$ServerAlias = 'zotero-assistant-new')
 $ErrorActionPreference = 'Stop'
 if ($LocalPort -lt 1024 -or $LocalPort -gt 65535) { throw 'Invalid local port' }
 $projectDir = Split-Path -Parent $PSScriptRoot
@@ -13,7 +13,7 @@ if (Test-Path -LiteralPath $pidFile) {
         $forward = "127.0.0.1:${LocalPort}:127.0.0.1:8765"
         if ($savedProcess -and $savedProcess.Name -eq 'ssh.exe' -and
             $savedProcess.CommandLine -like "*${forward}*" -and
-            $savedProcess.CommandLine -like '*agent-assistant*') {
+            $savedProcess.CommandLine -like "*${ServerAlias}*") {
             $status = & curl.exe --noproxy '*' --connect-timeout 1 --max-time 3 --silent --output NUL --write-out '%{http_code}' $healthUrl
             if ($LASTEXITCODE -eq 0 -and $status -eq '200') {
                 Write-Output "Research assistant already available: http://127.0.0.1:${LocalPort}/ (SSH PID $savedPid)"
@@ -34,7 +34,7 @@ if ($listener) {
 $arguments = @(
     '-N','-o','BatchMode=yes','-o','ExitOnForwardFailure=yes',
     '-o','ServerAliveInterval=30','-o','ServerAliveCountMax=3',
-    '-L',"127.0.0.1:${LocalPort}:127.0.0.1:8765",'agent-assistant'
+    '-L',"127.0.0.1:${LocalPort}:127.0.0.1:8765",$ServerAlias
 )
 $process = Start-Process -FilePath ssh.exe -ArgumentList $arguments -WindowStyle Hidden -PassThru
 Start-Sleep -Seconds 2

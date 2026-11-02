@@ -59,6 +59,20 @@ class KnowledgeTests(unittest.TestCase):
         self.assertTrue(self.search([self.b]))
         self.assertTrue(self.store.object_exists(self.sha))
 
+    def test_cheap_signature_detects_change_without_reading_page_text(self):
+        self.sync(self.a, [self.doc])
+        self.assertTrue(self.search([self.a]))
+        before = self.store.corpus_signature()
+        built = self.service.index
+        # Unchanged corpus must not rebuild the index and must not touch page texts at all.
+        with patch.object(self.store, "corpus", side_effect=AssertionError("corpus loaded")):
+            self.assertIs(self.service.get_index({self.sha + ".pdf"}), built)
+            self.assertEqual(self.store.corpus_signature(), before)
+        # A revision bump on any member must change the signature and force a rebuild.
+        self.sync(self.a, [self.doc, self.note(confirmed=True)])
+        self.assertNotEqual(self.store.corpus_signature(), before)
+        self.assertIsNot(self.service.get_index(), built)
+
     def test_empty_or_unknown_scope_never_becomes_global(self):
         self.sync(self.a, [self.doc])
         self.assertEqual(self.search([self.b]), [])
@@ -120,6 +134,123 @@ class KnowledgeTests(unittest.TestCase):
         with self.store.transaction() as con:
             self.assertEqual(con.execute("SELECT COUNT(*) FROM note_revisions").fetchone()[0], 2)
 
+    def test_ai_note_is_draft_until_user_confirms_and_keeps_provenance(self):
+        self.sync(self.a, [self.doc])
+        draft = self.store.save_note(self.a["id"], {
+            "title": "模型整理草稿", "body": "AI 提取的待核对结论",
+            "author_source": "ai", "confirmed": False,
+            "anchors": [{"source": self.sha + ".pdf", "page": 1,
+                         "quote": "Scientific evidence from original paper."}],
+        })
+        self.assertEqual(draft["author_source"], "ai")
+        self.assertIsNone(draft["confirmed_by"])
+        self.assertEqual(self.search([self.a], "待核对结论", scope="notes"), [])
+
+        confirmed = self.store.save_note(self.a["id"], {
+            "body": "用户核对后的结论", "confirmed": True,
+            "expected_revision": draft["revision"],
+        }, draft["id"])
+        self.assertEqual(confirmed["author_source"], "ai")
+        self.assertEqual(confirmed["confirmed_by"], "user")
+        self.assertEqual(confirmed["revision"], 2)
+        self.assertTrue(self.search([self.a], "核对后的结论", scope="notes"))
+        with self.assertRaises(ValueError):
+            self.store.save_note(self.a["id"], {
+                "body": "伪装成手写记录", "author_source": "user",
+                "confirmed": True, "expected_revision": 2,
+            }, draft["id"])
+        with self.assertRaises(ValueError):
+            self.store.save_note(self.a["id"], {
+                "title": "错误引用", "body": "不能保存", "author_source": "ai",
+                "confirmed": False,
+                "anchors": [{"source": self.sha + ".pdf", "page": 1,
+                             "quote": "这段话不在论文原文中。"}],
+            })
+
+    def test_personal_note_source_anchor_and_history_are_preserved(self):
+        self.sync(self.a, [self.doc])
+        anchor = {"source": self.sha + ".pdf", "page": 1,
+                  "quote": "Scientific evidence from original paper.",
+                  "url": "zotero://open-pdf/library/items/PDF00001?page=1"}
+        first = self.store.save_note(self.a["id"], {"body": "我的理解", "anchors": [anchor]})
+        self.assertTrue(first["source_verified"])
+        self.assertEqual(first["anchors"][0]["verification_status"], "verified")
+        second = self.store.save_note(self.a["id"], {"body": "修正后的理解", "expected_revision": 1}, first["id"])
+        self.assertEqual(second["source_status"], "linked")
+        self.assertEqual(second["anchors"][0]["quote"], anchor["quote"])
+        history = self.store.note_history(first["id"])
+        self.assertEqual([row["revision"] for row in history], [2, 1])
+        hits = self.search([self.a], "修正后的理解", scope="notes")
+        self.assertEqual(hits[0]["source_status"], "linked")
+        self.assertTrue(hits[0]["source_verified"])
+        self.assertEqual(hits[0]["anchors"][0]["page"], 1)
+        with self.assertRaises(ValueError):
+            self.store.save_note(self.a["id"], {"body": "bad", "anchors": [{**anchor, "url": "https://evil.invalid"}]})
+        with self.assertRaises(ValueError):
+            self.store.save_note(self.a["id"], {"body": "bad", "type": "claim",
+                                                "anchors": [anchor]})
+        with self.assertRaises(ValueError):
+            self.store.save_note(self.a["id"], {"body": "bad", "anchors": [{**anchor, "source": "missing.pdf"}]})
+
+    def test_user_note_keeps_unverified_quote_explicitly_marked(self):
+        self.sync(self.a, [self.doc])
+        note = self.store.save_note(self.a["id"], {
+            "body": "我的待核对理解", "anchors": [{
+                "source": self.sha + ".pdf", "page": 1,
+                "quote": "这句摘录不在 PDF 页面中。",
+            }],
+        })
+        self.assertFalse(note["source_verified"])
+        self.assertEqual(note["anchors"][0]["verification_status"], "unverified")
+        hits = self.search([self.a], "待核对理解", scope="notes")
+        self.assertTrue(hits)
+        self.assertFalse(hits[0]["source_verified"])
+
+    def test_legacy_note_without_verification_fields_is_annotated_on_read(self):
+        self.sync(self.a, [self.doc])
+        note = self.store.save_note(self.a["id"], {"body": "旧版本来源记录", "anchors": [{
+            "source": self.sha + ".pdf", "page": 1,
+            "quote": "Scientific evidence from original paper.",
+        }]})
+        # Simulate a database written before verification_status/source_verified
+        # existed. The read path must not mutate the immutable revision.
+        with self.store.transaction() as con:
+            payload = json.loads(con.execute("SELECT payload FROM local_notes WHERE id=?", (note["id"],)).fetchone()[0])
+            payload.pop("source_verified", None)
+            for anchor in payload["anchors"]:
+                anchor.pop("verification_status", None)
+            con.execute("UPDATE local_notes SET payload=? WHERE id=?", (json.dumps(payload, ensure_ascii=False), note["id"]))
+        snapshot = self.store.snapshot([self.a["id"]])
+        restored = next(item for item in snapshot["notes"] if item["id"] == note["id"])["data"]
+        self.assertTrue(restored["source_verified"])
+        self.assertEqual(restored["anchors"][0]["verification_status"], "verified")
+        history = self.store.note_history(note["id"])
+        self.assertTrue(history[0]["source_verified"])
+
+    def test_editing_archived_note_preserves_archive_until_explicit_restore(self):
+        self.sync(self.a, [self.doc])
+        first = self.store.save_note(self.a["id"], {"body": "旧的阅读理解"})
+        archived = self.store.save_note(self.a["id"], {
+            "body": first["body"], "archived": True,
+            "expected_revision": first["revision"],
+        }, first["id"])
+        edited = self.store.save_note(self.a["id"], {
+            "body": "补充后的阅读理解", "expected_revision": archived["revision"],
+        }, first["id"])
+        self.assertTrue(edited["archived"])
+        self.assertEqual(self.search([self.a], "补充后的阅读理解", scope="notes"), [])
+        restored = self.store.save_note(self.a["id"], {
+            "body": edited["body"], "archived": False,
+            "expected_revision": edited["revision"],
+        }, first["id"])
+        self.assertFalse(restored["archived"])
+        self.assertTrue(self.search([self.a], "补充后的阅读理解", scope="notes"))
+        with self.assertRaises(ValueError):
+            self.store.save_note(self.a["id"], {
+                "body": "bad", "archived": "false",
+                "expected_revision": restored["revision"],
+            }, first["id"])
+
     def test_archive_preserves_data_but_excludes_search(self):
         self.sync(self.a, [self.doc])
         base = self.store.base(self.a["id"])
@@ -175,17 +306,80 @@ class KnowledgeTests(unittest.TestCase):
                 restore_backup(path, Path(self.temp.name) / "new")
             self.assertFalse((Path(self.temp.name) / "new").exists())
 
+    def test_backup_after_qa_preserves_memory_revisions_and_retrieval(self):
+        self.sync(self.a, [self.doc, self.note(body="我的实验疑问")])
+        note = self.store.save_note(self.a["id"], {"body": "旧理解需要修正"})
+        self.store.save_note(self.a["id"], {
+            "body": "我的新理解是必须先进行校准", "expected_revision": 1,
+            "anchors": [{"source": self.sha + ".pdf", "page": 1,
+                         "quote": "Scientific evidence from original paper.",
+                         "url": "zotero://open-pdf/library/items/PDF00001?page=1"}],
+        }, note["id"])
+        archived = self.store.save_note(self.a["id"], {"body": "旧观点已归档", "archived": True})
+        draft = self.store.save_note(self.a["id"], {"body": "未确认的研究猜测", "confirmed": False})
+        # Exercise the actual telemetry writer used by EvidenceQA.
+        self.store.record_qa_run({"trace": {"run_id": "synthetic-backup-run", "calls": [], "steps": []},
+                                  "status": "answered", "claims": [], "evidence": []})
+        backup = Path(self.temp.name) / "after-qa.zip"
+        export_backup(self.store, backup)
+        restored = KnowledgeStore(restore_backup(backup, Path(self.temp.name) / "recovered"))
+        self.assertEqual(restored.snapshot([self.a["id"]]), self.store.snapshot([self.a["id"]]))
+        self.assertEqual(restored.note_history(note["id"]), self.store.note_history(note["id"]))
+        self.assertEqual((restored.objects / (self.sha + ".pdf")).read_bytes(), self.content)
+        with restored.read() as con:
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM qa_runs").fetchone()[0], 1)
+        results = KnowledgeService(restored, backend="tfidf").search({
+            "query": "我的新理解校准", "kb_ids": [self.a["id"]], "scope": "notes"})["results"]
+        self.assertTrue(any(r["entity_id"] == note["id"] and r["revision"] == 2 for r in results))
+        self.assertFalse(any(r["entity_id"] in {archived["id"], draft["id"]} for r in results))
+
+    def test_restore_still_rejects_unknown_tables_even_with_valid_manifest(self):
+        with self.store.transaction() as con:
+            con.execute("CREATE TABLE unexpected_data(id INTEGER)")
+        backup = Path(self.temp.name) / "unknown.zip"
+        export_backup(self.store, backup)
+        target = Path(self.temp.name) / "not-created"
+        with self.assertRaisesRegex(ValueError, "结构不兼容"):
+            restore_backup(backup, target)
+        self.assertFalse(target.exists())
+
+    def test_backup_write_failure_preserves_previous_usable_archive(self):
+        backup = Path(self.temp.name) / "preserved.zip"
+        export_backup(self.store, backup)
+        before = backup.read_bytes()
+        with patch("research_assistant.knowledge.backup.zipfile.ZipFile.writestr", side_effect=OSError("disk full")):
+            with self.assertRaises(OSError):
+                export_backup(self.store, backup)
+        self.assertEqual(backup.read_bytes(), before)
+        restore_backup(backup, Path(self.temp.name) / "still-restores")
+        self.assertFalse(list(Path(self.temp.name).glob(".research-backup-*")))
+
     def test_http_auth_origin_and_no_legacy_side_effects(self):
         api = KnowledgeAPI(self.root, token="synthetic-token")
         client = TestClient(Starlette(routes=api.routes()))
         self.addCleanup(client.close)
         self.assertEqual(client.get("/api/knowledge/bases").status_code, 401)
         headers = {"Authorization": "Bearer synthetic-token"}
-        self.assertEqual(client.get("/api/knowledge/status", headers=headers).json()["protocol"], 1)
+        status = client.get("/api/knowledge/status", headers=headers).json()
+        self.assertEqual(status["protocol"], 1)
+        self.assertIn("knowledge", status)
+        self.assertIn("qa_jobs", status)
+        self.assertEqual(status["knowledge"]["knowledge_bases"], 2)
+        self.assertEqual(status["knowledge"]["local_notes"], 0)
+        self.assertEqual(status["qa_jobs"]["total"], 0)
         self.assertEqual(client.post("/api/knowledge/bases", headers={**headers, "Origin": "https://evil.invalid"}, json={}).status_code, 403)
         self.assertEqual(client.post("/api/knowledge/search", headers=headers, json={"kb_ids": [], "query": "text"}).status_code, 400)
         self.assertFalse((self.root / ".data/reading.sqlite3").exists())
         self.assertFalse((self.root / "library").exists())
+
+    def test_note_history_http_endpoint(self):
+        note = self.store.save_note(self.a["id"], {"body": "历史记录"})
+        api = KnowledgeAPI(self.root, token="synthetic-token")
+        with TestClient(Starlette(routes=api.routes())) as client:
+            headers = {"Authorization": "Bearer synthetic-token"}
+            response = client.get("/api/knowledge/history/" + note["id"], headers=headers)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()[0]["revision"], 1)
 
     def test_pdf_binary_http_and_consent(self):
         api = KnowledgeAPI(self.root, token="synthetic-token")

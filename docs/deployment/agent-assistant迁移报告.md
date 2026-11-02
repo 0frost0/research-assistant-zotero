@@ -1,5 +1,9 @@
 # agent-assistant 迁移报告
 
+> **当前有效部署（2026-10-06）**
+>
+> 项目当前运行在 `zotero-assistant-new:/home/ubuntu/research-assistant/app`，数据盘为 `/mnt/research-data/research-assistant`。Web、Qdrant、Qwen Embedding、MinerU 四个服务由系统级 systemd 管理，分别使用本机回环端口 `8765/6333/30001/30000`；Windows 通过 SSH 隧道访问 `http://127.0.0.1:8765`。最新代码发布为 `/mnt/research-data/research-assistant/releases/20261006-005129`；健康接口和远端 328 项回归均通过。以下 2026-09-20 内容保留作迁移历史，不能作为当前服务器、路径或测试计数。
+
 日期：2026-09-20
 结论：科研助手已迁移到 `agent-assistant:/srv/research-assistant/app`，本机 `127.0.0.1:8765` 已切换为 SSH 隧道入口。迁移期间未调用 DeepSeek 等付费模型。
 

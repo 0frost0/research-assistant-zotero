@@ -30,6 +30,11 @@ def text(value, name, limit=2000, empty=False):
     return value.strip()
 
 
+def compact_text(value):
+    """Normalize PDF line wrapping for source-quote containment checks."""
+    return re.sub(r"\s+", "", str(value)).casefold()
+
+
 def key(value):
     value = text(value, "Zotero 标识", 128)
     if not re.fullmatch(r"[A-Za-z0-9_.:-]+", value):
@@ -99,6 +104,16 @@ class KnowledgeStore:
             finally:
                 con.close()
 
+    @contextmanager
+    def read(self):
+        con = sqlite3.connect(self.path, timeout=15)
+        con.row_factory = sqlite3.Row
+        try:
+            con.execute("PRAGMA foreign_keys=ON")
+            yield con
+        finally:
+            con.close()
+
     def bases(self):
         with self.transaction() as con:
             return [dict(row) for row in con.execute("""
@@ -106,6 +121,34 @@ class KnowledgeStore:
                 FROM knowledge_bases k LEFT JOIN memberships m ON m.kb_id=k.id
                 GROUP BY k.id ORDER BY k.name,k.id
             """)]
+
+    def stats(self):
+        """Return content-free operational counts for the authenticated status API."""
+        with self.read() as con:
+            bases = con.execute("SELECT COUNT(*), COALESCE(SUM(archived=0),0) FROM knowledge_bases").fetchone()
+            entities = con.execute(
+                "SELECT COUNT(*), COALESCE(SUM(kind='document'),0), "
+                "COALESCE(SUM(kind IN ('note','annotation')),0) FROM entities"
+            ).fetchone()
+            note_payloads = [row[0] for row in con.execute("SELECT payload FROM local_notes")]
+            objects = con.execute("SELECT COUNT(*) FROM objects").fetchone()[0]
+        active_notes = 0
+        for payload in note_payloads:
+            try:
+                value = json.loads(payload)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+            active_notes += int(value.get("confirmed") is True and value.get("archived") is not True)
+        return {
+            "knowledge_bases": int(bases[0]),
+            "active_knowledge_bases": int(bases[1]),
+            "entities": int(entities[0]),
+            "documents": int(entities[1]),
+            "external_records": int(entities[2]),
+            "local_notes": len(note_payloads),
+            "active_confirmed_notes": active_notes,
+            "pdf_objects": int(objects),
+        }
 
     def base(self, ident, con=None):
         if con is None:
@@ -135,6 +178,38 @@ class KnowledgeStore:
             exists = con.execute("SELECT 1 FROM objects WHERE hash=?", (sha,)).fetchone()
         path = self.objects / (sha + ".pdf")
         return bool(exists and path.is_file() and digest(path.read_bytes()) == sha)
+
+    def _annotate_note_payload(self, payload, con):
+        """Add provenance verification to old notes without rewriting history.
+
+        Notes created before ``verification_status`` was introduced remain
+        readable.  Recomputing the status against immutable PDF objects at
+        read time avoids presenting them as unverified merely because they
+        have not been edited since the field was added.
+        """
+        result = dict(payload)
+        anchors = []
+        for raw in payload.get("anchors", []) or []:
+            if not isinstance(raw, dict):
+                continue
+            anchor = dict(raw)
+            verified = anchor.get("verification_status") == "verified"
+            if anchor.get("page") is not None and str(anchor.get("source", "")).endswith(".pdf"):
+                row = con.execute(
+                    "SELECT pages FROM objects WHERE hash=?",
+                    (str(anchor.get("source"))[:-4],),
+                ).fetchone()
+                if row:
+                    pages = json.loads(row[0])
+                    page = next((item for item in pages if item.get("page") == anchor.get("page")), None)
+                    verified = bool(page and compact_text(anchor.get("quote", "")) in compact_text(page.get("text", "")))
+            anchor["verification_status"] = "verified" if verified else "unverified"
+            anchors.append(anchor)
+        result["anchors"] = anchors
+        result["source_verified"] = bool(anchors) and all(
+            anchor["verification_status"] == "verified" for anchor in anchors
+        )
+        return result
 
     def put_object(self, sha, content):
         if len(content) > 25 * 1024 * 1024 or not content.startswith(b"%PDF-"):
@@ -274,7 +349,7 @@ class KnowledgeStore:
                         value["extraction"] = {k: report[k] for k in ("total_pages", "native_pages", "low_text_pages", "empty_pages")}
                     entities[row["id"]] = {**dict(row), "data": value}
                 for row in con.execute("SELECT * FROM local_notes WHERE kb_id=?", (base["id"],)):
-                    notes[row["id"]] = {**dict(row), "data": json.loads(row["payload"])}
+                    notes[row["id"]] = {**dict(row), "data": self._annotate_note_payload(json.loads(row["payload"]), con)}
             return {"bases": bases, "entities": list(entities.values()), "notes": list(notes.values())}
 
     def assert_current(self, snapshot):
@@ -288,10 +363,91 @@ class KnowledgeStore:
         confirmed = data.get("confirmed", True)
         if type(confirmed) is not bool:
             raise ValueError("确认状态无效。")
+        old_payload = {}
+        if ident:
+            with self.read() as con:
+                old_row = con.execute("SELECT payload FROM local_notes WHERE id=? AND kb_id=?", (ident, kb_id)).fetchone()
+            if old_row:
+                old_payload = json.loads(old_row[0])
+        kind = data.get("type", old_payload.get("type", "understanding"))
+        if kind not in {"understanding", "question", "idea"}:
+            raise ValueError("笔记类型只能是理解、疑问或想法。")
+        author_source = data.get("author_source", old_payload.get("author_source", "user"))
+        if author_source not in {"user", "ai"}:
+            raise ValueError("笔记来源只能是 user 或 ai。")
+        if old_payload.get("author_source") == "ai" and author_source != "ai":
+            raise ValueError("AI 草稿的来源不可改写为用户手写记录。")
+        # Editing a note should not silently restore an archived record.  The
+        # archive action sends an explicit boolean; ordinary edits preserve the
+        # current state so a stale or partial client payload cannot re-enable
+        # an old memory in retrieval.
+        if "archived" in data and type(data["archived"]) is not bool:
+            raise ValueError("归档状态无效。")
+        archived = data["archived"] if "archived" in data else bool(old_payload.get("archived", False))
+        anchors = data.get("anchors", old_payload.get("anchors", []))
+        if not isinstance(anchors, list) or len(anchors) > 12:
+            raise ValueError("笔记最多关联 12 个来源。")
+        clean_anchors = []
+        for anchor in anchors:
+            if not isinstance(anchor, dict):
+                raise ValueError("来源锚点格式错误。")
+            source = anchor.get("source")
+            quote = anchor.get("quote", "")
+            page = anchor.get("page")
+            if (not isinstance(source, str) or not source.strip() or len(source) > 500
+                    or not isinstance(quote, str) or not 1 <= len(quote.strip()) <= 12000):
+                raise ValueError("来源锚点必须包含来源标识和原文摘录。")
+            if page is not None and (type(page) is not int or not 1 <= page <= 100000):
+                raise ValueError("来源页码无效。")
+            url = anchor.get("url")
+            if url is not None and (not isinstance(url, str) or len(url) > 2000
+                                    or not (url.startswith("zotero://") or url.startswith("/"))):
+                raise ValueError("来源链接只允许 Zotero 或本站路径。")
+            clean_anchors.append({"source": source.strip(), "page": page,
+                                  "quote": quote.strip(), "url": url,
+                                  "kind": str(anchor.get("kind", "original"))[:40]})
         with self.transaction() as con:
             base = self.base(kb_id, con)
             if base["archived"]:
                 raise Conflict("知识库已归档。")
+            allowed_sources = set()
+            for row in con.execute("SELECT payload FROM entities e JOIN memberships m ON e.id=m.entity_id WHERE m.kb_id=?", (kb_id,)):
+                entity = json.loads(row[0])
+                if entity.get("kind") == "document" and entity.get("hash"):
+                    allowed_sources.add(entity["hash"] + ".pdf")
+            for anchor in clean_anchors:
+                if anchor["source"] not in allowed_sources:
+                    raise ValueError("来源论文不属于当前知识库，未保存笔记。")
+            # User notes may contain a paraphrase or a Zotero annotation whose
+            # text differs from the extracted PDF. Keep the note, but record
+            # whether the quoted text can be found on the declared page. AI
+            # drafts below remain strict and reject unverified quotes.
+            for anchor in clean_anchors:
+                verified = False
+                if anchor["page"] is not None and anchor["source"].endswith(".pdf"):
+                    row = con.execute(
+                        "SELECT pages FROM objects WHERE hash=?",
+                        (anchor["source"][:-4],),
+                    ).fetchone()
+                    if row:
+                        pages = json.loads(row[0])
+                        page = next((item for item in pages if item.get("page") == anchor["page"]), None)
+                        verified = bool(page and compact_text(anchor["quote"]) in compact_text(page.get("text", "")))
+                anchor["verification_status"] = "verified" if verified else "unverified"
+            if author_source == "ai":
+                if not clean_anchors:
+                    raise ValueError("AI 草稿必须关联原文来源。")
+                objects = {
+                    row["hash"]: json.loads(row["pages"])
+                    for row in con.execute("SELECT hash,pages FROM objects")
+                }
+                for anchor in clean_anchors:
+                    if anchor["page"] is None:
+                        raise ValueError("AI 草稿来源必须包含原文页码。")
+                    pages = objects.get(anchor["source"][:-4], [])
+                    page = next((item for item in pages if item.get("page") == anchor["page"]), None)
+                    if not page or compact_text(anchor["quote"]) not in compact_text(page.get("text", "")):
+                        raise ValueError("AI 草稿摘录不在指定原文页面中，未保存。")
             old = con.execute("SELECT * FROM local_notes WHERE id=? AND kb_id=?", (ident, kb_id)).fetchone() if ident else None
             if ident and not old:
                 raise KeyError(ident)
@@ -299,17 +455,83 @@ class KnowledgeStore:
                 raise Conflict("笔记已有更新，未覆盖你的内容。")
             ident = ident or str(uuid.uuid4())
             revision = old["revision"] + 1 if old else 1
-            payload = {"title": title, "body": body, "confirmed": confirmed,
-                       "archived": data.get("archived") is True, "author_source": "user",
+            # AI may create only an unconfirmed draft.  A later user edit can
+            # confirm it, while retaining the original AI provenance.
+            if author_source == "ai" and confirmed and old_payload.get("author_source") != "ai":
+                raise ValueError("AI 来源笔记必须先以未确认草稿保存。")
+            payload = {"title": title, "body": body, "type": kind, "confirmed": confirmed,
+                       "archived": archived, "author_source": "user",
+                       "confirmed_by": "user" if confirmed else None,
+                       "anchors": clean_anchors,
+                       "source_status": "linked" if clean_anchors else "unlinked",
+                       "source_verified": bool(clean_anchors) and all(
+                           anchor["verification_status"] == "verified" for anchor in clean_anchors
+                       ),
                        "updated_at": now()}
+            if author_source == "ai" or old_payload.get("author_source") == "ai":
+                payload["author_source"] = "ai"
+                payload["confirmed_by"] = "user" if confirmed else None
             con.execute("INSERT OR REPLACE INTO local_notes VALUES(?,?,?,?)", (ident, kb_id, encoded(payload), revision))
             con.execute("INSERT INTO note_revisions VALUES(?,?,?)", (ident, revision, encoded(payload)))
             con.execute("UPDATE knowledge_bases SET revision=revision+1,updated_at=? WHERE id=?", (now(), kb_id))
             return {"id": ident, "kb_id": kb_id, "revision": revision, **payload}
 
+    def note_history(self, ident):
+        with self.read() as con:
+            current = con.execute("SELECT kb_id FROM local_notes WHERE id=?", (ident,)).fetchone()
+            revisions = con.execute(
+                "SELECT revision, payload FROM note_revisions WHERE id=? ORDER BY revision DESC",
+                (ident,),
+            ).fetchall()
+            if not current or not revisions:
+                raise KeyError(ident)
+            result = []
+            seen = set()
+            for row in revisions:
+                if row[0] in seen:
+                    continue
+                seen.add(row[0])
+                value = self._annotate_note_payload(json.loads(row[1]), con)
+                result.append({"id": ident, "kb_id": current[0], "revision": row[0], **value})
+            return result
+
+    def corpus_signature(self):
+        """Cheap change probe: reads only identifiers and revisions, never page texts."""
+        with self.transaction() as con:
+            entities = con.execute("""
+                SELECT DISTINCT e.id AS id, e.revision AS revision
+                FROM entities e JOIN memberships m ON e.id=m.entity_id ORDER BY e.id
+            """).fetchall()
+            notes = con.execute("SELECT id, revision FROM local_notes ORDER BY id").fetchall()
+            parsed = [(r["hash"], digest(r["report"].encode())) for r in
+                      con.execute("SELECT hash,report FROM objects ORDER BY hash")]
+        return digest(encoded([(row["id"], row["revision"]) for row in entities] +
+                              [(row["id"], row["revision"]) for row in notes] + parsed).encode())
+
+    def record_qa_run(self, result):
+        trace = result["trace"]
+        safe = {k: v for k, v in trace.items() if k != "steps"}
+        # Persist a useful operational projection while keeping the question,
+        # page text and evidence out of the durable telemetry table.
+        from research_assistant.core.agent_telemetry import summarize_qa_trace
+        safe["qa_observability"] = summarize_qa_trace(trace)
+        safe.update(status=result["status"], claims=len(result["claims"]), evidence=len(result["evidence"]))
+        with self.transaction() as con:
+            con.execute("CREATE TABLE IF NOT EXISTS qa_runs(id TEXT PRIMARY KEY, created_at TEXT NOT NULL, metrics TEXT NOT NULL)")
+            con.execute("INSERT INTO qa_runs VALUES(?,?,?)", (trace["run_id"], now(), encoded(safe)))
+
     def corpus(self):
         with self.transaction() as con:
-            documents = {r["hash"]: json.loads(r["pages"]) for r in con.execute("SELECT * FROM objects")}
+            documents = {}
+            for row in con.execute("SELECT * FROM objects"):
+                blocks = json.loads(row["report"]).get("mineru", {}).get("blocks")
+                documents[row["hash"]] = ([{"text": b["text"], "page": b["metadata"].get("page"),
+                                            "metadata": b["metadata"]} for b in blocks]
+                                           if blocks else json.loads(row["pages"]))
             entities = [dict(r) for r in con.execute("SELECT DISTINCT e.* FROM entities e JOIN memberships m ON e.id=m.entity_id")]
-            notes = [dict(r) for r in con.execute("SELECT * FROM local_notes")]
+            notes = []
+            for row in con.execute("SELECT * FROM local_notes"):
+                item = dict(row)
+                item["payload"] = encoded(self._annotate_note_payload(json.loads(row["payload"]), con))
+                notes.append(item)
         return documents, entities, notes

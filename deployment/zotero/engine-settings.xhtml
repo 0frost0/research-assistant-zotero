@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><meta charset="utf-8" /><title>本机启动设置</title>
+<style>
+:root {color-scheme:light dark;font:14px "Segoe UI","Microsoft YaHei",sans-serif;}
+body {margin:0;padding:24px;max-width:820px;background:Canvas;color:CanvasText;}
+h1 {font-size:22px;margin:0 0 8px;} h2 {font-size:16px;margin:22px 0 10px;}
+p {line-height:1.6;opacity:.8;} label.field {display:block;margin:12px 0 5px;}
+input:not([type=checkbox]) {box-sizing:border-box;width:100%;padding:9px;border:1px solid #87989b;border-radius:6px;font:inherit;}
+.check {display:block;margin:12px 0;} footer {display:flex;gap:10px;margin-top:20px;justify-content:flex-end;}
+button {padding:8px 16px;font:inherit;border-radius:6px;cursor:pointer;} #save {background:#235e50;color:white;border:1px solid #235e50;}
+#error {color:#c34332;white-space:pre-wrap;} .hint {font-size:12px;} fieldset {border:0;padding:0;margin:0;}
+</style></head>
+<body>
+<h1>本机启动设置</h1><p>一次填写，日常点击“启动全部服务”。保存设置不会启动服务或调用模型。</p>
+<form id="settings"><fieldset id="fields">
+<h2>本地科研助手</h2>
+<label class="field" for="engineWorkdir">项目目录</label><input id="engineWorkdir" required="required" />
+<label class="field" for="engineExecutable">Python 解释器</label><input id="engineExecutable" required="required" />
+<label class="field" for="engineScript">启动脚本</label><input id="engineScript" required="required" />
+<button id="suggest" type="button">填入本项目推荐路径</button>
+<p class="hint">本机地址固定为 http://127.0.0.1:8765。连接令牌从项目目录自动读取，不需要填写；它不是模型 API 密钥。</p>
+<h2>远端 Qwen（可选）</h2>
+<label class="field" for="sshExecutable">SSH 程序路径（留空自动查找）</label><input id="sshExecutable" placeholder="C:\Windows\System32\OpenSSH\ssh.exe" />
+<label class="field" for="qwenSshHost">SSH 别名</label><input id="qwenSshHost" placeholder="zotero-assistant-new" />
+<label class="field" for="qwenServiceUnit">systemd 服务名</label><input id="qwenServiceUnit" placeholder="research-assistant-embedding.service" />
+<p class="hint">直接连接 HTTPS API 时两项留空；远端已常驻运行时服务名留空。模型地址、模型名和 API 密钥在“服务设置”填写。</p>
+<label class="check"><input id="autoStartEngine" type="checkbox" />启动 Zotero 时自动准备服务</label>
+<label class="check"><input id="stopEngineOnExit" type="checkbox" />退出 Zotero 时停止本插件启动的 Python 后端</label>
+<footer><button id="cancel" type="button">取消</button><button id="save" type="submit">保存</button></footer>
+</fieldset></form><p id="error" role="alert"></p>
+<script src="engine-settings.js"></script>
+</body></html>

@@ -11,7 +11,7 @@ async function startup({ rootURI }) {
     [["content", "researchassistant", ""]]
   );
   const { Subprocess } = ChromeUtils.importESModule("resource://gre/modules/Subprocess.sys.mjs");
-  bridgeScope = { Zotero, Services, IOUtils, Subprocess, URL: Zotero.getMainWindow().URL };
+  bridgeScope = { Zotero, Services, IOUtils, PathUtils, Subprocess, URL: Zotero.getMainWindow().URL };
   Services.scriptloader.loadSubScript(rootURI + "bridge.js", bridgeScope);
   await bridgeScope.ResearchBridge.start(rootURI);
   for (const window of Zotero.getMainWindows()) bridgeScope.ResearchBridge.loadWindow(window);

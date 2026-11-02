@@ -8,7 +8,9 @@ from unittest.mock import AsyncMock, Mock, patch
 
 from langchain_core.exceptions import OutputParserException
 
-from research_assistant.core.agent_telemetry import ExecutionTrace, ModelReply, interrupted_trace, normalize_usage, summarize, token_usage
+from research_assistant.core.agent_telemetry import (ExecutionTrace, ModelReply, interrupted_trace,
+                                                     normalize_usage, summarize, summarize_qa_trace,
+                                                     token_usage)
 from research_assistant.agents.comparison_workflow import ComparisonWorkflow, call_model
 from tests.test_comparison import documents, fixture_caller
 
@@ -63,6 +65,20 @@ class UsageTests(unittest.TestCase):
         span = trace.start("analyst", "model")
         trace.end(span, "cancelled")
         self.assertEqual(trace.snapshot()["summary"]["model_calls"], 0)
+
+    def test_qa_summary_keeps_operations_and_drops_content(self):
+        value = summarize_qa_trace({
+            "scope": "original", "model_calls": 2, "retrieval_calls": 1,
+            "steps": [{"stage": "retrieve", "query": "PRIVATE QUESTION",
+                       "candidates": 4, "selected": 2, "elapsed_ms": 12}],
+            "calls": [{"role": "answer", "status": "succeeded", "elapsed_ms": 20,
+                       "usage": "known", "input_tokens": 11, "output_tokens": 7}],
+        })
+        text = json.dumps(value, ensure_ascii=False)
+        self.assertEqual(value["workflow_version"], "qa-observability-v1")
+        self.assertEqual(value["stages"][0]["stage"], "retrieve")
+        self.assertEqual(value["calls"][0]["input_tokens"], 11)
+        self.assertNotIn("PRIVATE QUESTION", text)
 
 
 class ExperimentTests(unittest.TestCase):

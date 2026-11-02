@@ -8,7 +8,24 @@ test("manifest includes Zotero 9 required update URL", () => {
   const manifest = JSON.parse(
     fs.readFileSync(path.join(__dirname, "../deployment/zotero/manifest.json"), "utf8")
   );
-  assert.match(manifest.applications.zotero.update_url, /^https:\/\//);
+  const zotero = manifest.applications.zotero;
+  assert.match(zotero.update_url, /^https:\/\//);
+  // C01: Zotero 9.0.6 rejects manifests without this field, so it must stay a
+  // real, resolvable location rather than a placeholder domain.
+  assert.doesNotMatch(zotero.update_url, /example\.(invalid|com|org)/);
+
+  // The published update manifest must describe the version actually shipped.
+  const updates = JSON.parse(
+    fs.readFileSync(path.join(__dirname, "../updates.json"), "utf8")
+  );
+  const entries = updates.addons[zotero.id].updates;
+  const current = entries.find((item) => item.version === manifest.version);
+  assert.ok(current, `updates.json has no entry for version ${manifest.version}`);
+  assert.ok(current.update_link.endsWith(`research-assistant-${manifest.version}.xpi`));
+  assert.equal(
+    current.applications.zotero.strict_min_version,
+    zotero.strict_min_version
+  );
 });
 
 function fixture() {
@@ -33,10 +50,10 @@ function fixture() {
     debug() {}, logError() {},
   };
   const Subprocess = { call: async options => ({ options, exitCode: null, kill: async () => ({ exitCode: -9 }) }) };
-  const scope = { Zotero, Services: {}, ChromeUtils: {}, Subprocess, IOUtils: {}, URL, Uint8Array, console };
+  const scope = { Zotero, Services: {}, ChromeUtils: {}, Subprocess, PathUtils: {join: path.win32.join}, IOUtils: {exists: async () => false}, URL, Uint8Array, console };
   vm.createContext(scope);
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../deployment/zotero/bridge.js"), "utf8"), scope);
-  return { bridge: scope.ResearchBridge, Zotero, window, prefs, events, Subprocess };
+  return { bridge: scope.ResearchBridge, Zotero, window, prefs, events, Subprocess, IOUtils: scope.IOUtils };
 }
 
 test("refuses remote plaintext, credentials, query and fragments in endpoint", () => {
@@ -97,7 +114,7 @@ test("configured Python engine is launched and polled", async () => {
   bridge.backendStatus = async () => ({ connected: ++calls > 1, backend: "tfidf" });
   Subprocess.call = async options => {
     launched = options;
-    return { exitCode: null, kill: async () => ({ exitCode: -9 }) };
+    return { exitCode: null, stdout: {readString: async () => ''}, kill: async () => ({ exitCode: -9 }) };
   };
   const status = await bridge.startEngine();
   assert.equal(status.connected, true);
@@ -115,6 +132,58 @@ test("PDF bytes from another realm are sent as binary, not JSON", async () => {
     return { ok: true, json: async () => ({ ok: true }) };
   };
   await bridge.request("objects/hash", bytes, "PUT");
+});
+
+test("desktop startup prepares dependencies then connects, with duplicate calls merged", async () => {
+  const { bridge, Subprocess } = fixture();
+  bridge.setPref('engineExecutable', 'C:/Python/python.exe');
+  bridge.setPref('engineWorkdir', 'D:/assistant');
+  bridge.setPref('endpoint', 'http://127.0.0.1:8765');
+  let launches = 0;
+  Subprocess.call = async options => {
+    launches++;
+    assert.equal(options.arguments[0], 'D:\\assistant\\scripts\\prepare_desktop_services.py');
+    return {stdout: {readString: async () => 'ready'}, wait: async () => ({exitCode: 0})};
+  };
+  bridge.backendStatus = async () => ({connected: true});
+  const results = await Promise.all([bridge.startAllServices(), bridge.startAllServices()]);
+  assert.equal(launches, 1);
+  assert.ok(results.every(result => result.connected));
+});
+
+test("cancelled desktop configuration is not reported as successful startup", async () => {
+  const { bridge } = fixture();
+  bridge.configureEngine = async () => false;
+  await assert.rejects(bridge.startAllServices(), /已取消/);
+});
+
+test('Windows token path uses native separators and reads token without exposing it', async () => {
+  const {bridge, IOUtils} = fixture();
+  bridge.setPref('engineWorkdir', 'D:\\workspace\\research-assistant-zotero-github');
+  IOUtils.exists = async value => {
+    assert.equal(value, 'D:\\workspace\\research-assistant-zotero-github\\.data\\zotero\\connection-token');
+    assert.equal(value.includes('/'), false);
+    return true;
+  };
+  IOUtils.readUTF8 = async () => 'synthetic-token\n';
+  await bridge.readLocalToken();
+  assert.equal(bridge.pref('token'), 'synthetic-token');
+});
+
+test('SSH resolves exe suffix and respects explicit path without requiring PATH', async () => {
+  const {bridge, Subprocess, IOUtils} = fixture();
+  const executable = 'C:\\Windows\\System32\\OpenSSH\\ssh.exe';
+  Subprocess.pathSearch = async name => {
+    assert.equal(name, 'ssh.exe');
+    return executable;
+  };
+  assert.equal(await bridge.resolveSshExecutable(), executable);
+  bridge.setPref('sshExecutable', executable);
+  IOUtils.exists = async value => value === executable;
+  Subprocess.pathSearch = async () => { throw new Error('PATH unavailable'); };
+  assert.equal(await bridge.resolveSshExecutable(), executable);
+  IOUtils.exists = async () => false;
+  await assert.rejects(bridge.resolveSshExecutable(), /SSH 程序不存在/);
 });
 
 test("declining upload sends no requests", async () => {

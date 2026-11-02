@@ -351,6 +351,42 @@ class EvaluationStore:
         run["ai_relevance"] = ai_summary(run["cases"], run["ai_review"]["judgments"]) if ai_row else None
         return run
 
+    def export_approved_dataset(self, run_id):
+        """Return a frozen dataset containing only human-approved cases.
+
+        A run contains retrieval rankings, model outputs and mutable review state.
+        Those are deliberately omitted here: the exported file is an input for a
+        later evaluation run, not a copy of the review artifact.  AI review never
+        creates an approval row, so it cannot silently become test gold.
+        """
+        run = self.get(run_id)
+        approved = {a["case_id"] for a in run["approvals"]}
+        if not approved:
+            raise ValueError("No human-approved cases to export")
+        if not isinstance(run.get("corpus"), dict):
+            raise ValueError("Evaluation run has no corpus snapshot")
+        cases = []
+        for case in run["cases"]:
+            if case["id"] not in approved:
+                continue
+            # Keep only the dataset contract.  In particular, rankings, metrics,
+            # AI judgments and human notes must not leak into the next run.
+            cases.append({key: case[key] for key in (
+                "id", "query_type", "input_modality", "question",
+                "query_image_id", "expected", "unanswerable") if key in case} | {"split": "test"})
+        if not cases:
+            raise ValueError("Approved cases are not present in this run")
+        return {
+            "schema": SCHEMA,
+            "id": f"approved-{run_id}",
+            "created_at": now(),
+            "source_run_id": run_id,
+            "source_dataset_id": run.get("dataset_id"),
+            "source_dataset_hash": run["dataset_hash"],
+            "corpus": run["corpus"],
+            "cases": cases,
+        }
+
     def import_ai_review(self, package):
         """Atomic, immutable AI-only import; never writes judgments or gold approvals."""
         payload = json.dumps(package, ensure_ascii=False, sort_keys=True, allow_nan=False)

@@ -1,0 +1,18 @@
+{
+  "reviewer": "你的姓名",
+  "cases": [
+    {
+      "candidate_id": "feedback-替换为候选ID",
+      "decision": "approve",
+      "note": "已核对当前知识库中的原文页面和摘录。",
+      "no_answer": false,
+      "expected": [
+        {
+          "source_id": "sha256.pdf",
+          "page": 1,
+          "quote": "从候选文件中复制并核对后的逐字摘录"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  plugin:
+    name: Zotero bridge (Node)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      # The bridge has no npm dependencies; node:test ships with Node 20.
+      - name: Bridge contract tests
+        run: node --test tests/zotero_bridge.test.cjs tests/zotero_workbench.test.cjs
+      - name: Workbench JavaScript syntax check
+        run: node --check deployment/zotero/assistant.js
+
+  reproducible-build:
+    name: Reproducible XPI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build twice and compare checksums
+        run: |
+          python scripts/build_zotero_plugin.py | tee first.txt
+          python scripts/build_zotero_plugin.py | tee second.txt
+          diff <(grep sha256 first.txt) <(grep sha256 second.txt)
+      - name: Cross-platform archive metadata test
+        run: python -m unittest tests.test_zotero_build -v
+      - name: Verify both entry points agree
+        run: |
+          python deployment/zotero/build.py | grep sha256 > standalone.txt
+          diff <(grep sha256 first.txt) standalone.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zotero-xpi
+          path: output/zotero/*.xpi
+
+  backend:
+    name: Knowledge backend (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Only the dependency-light suites run here; retrieval/translation tests
+      # need remote embedding and OCR services that CI must not call.
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r deployment/requirements-web.txt
+      - name: Knowledge store, durable jobs, feedback export and API tests
+        run: python -m unittest tests.test_knowledge tests.test_knowledge_jobs tests.test_job_readonly tests.test_knowledge_qa tests.test_qa_feedback_export tests.test_approve_qa_feedback_candidates tests.test_qa_review_template tests.test_memory_review_template tests.test_personal_memory_approval tests.test_agent_telemetry -v
+      - name: Evaluation lab and human-gold export tests
+        run: python -m unittest tests.test_retrieval_lab tests.test_ai_review -v
+      - name: Personal memory smoke evaluation
+        run: |
+          python benchmarks/build_personal_memory_smoke_corpus.py --root "$RUNNER_TEMP/memory-smoke"
+          python benchmarks/validate_personal_memory_dataset.py \
+            --root "$RUNNER_TEMP/memory-smoke" \
+            --dataset "$RUNNER_TEMP/memory-smoke/dataset.json" \
+            --output "$RUNNER_TEMP/memory-smoke/validation.json"
+          python benchmarks/evaluate_personal_memory.py \
+            --root "$RUNNER_TEMP/memory-smoke" \
+            --dataset "$RUNNER_TEMP/memory-smoke/dataset.json" \
+            --output "$RUNNER_TEMP/memory-smoke/report.json" \
+            --apply-memory-gate --min-coverage 0.20 --expected-split test
+      - name: QA dataset preflight and retrieval smoke evaluation
+        run: |
+          python benchmarks/build_qa_smoke_corpus.py --root "$RUNNER_TEMP/qa-smoke"
+          python benchmarks/validate_knowledge_qa_dataset.py \
+            --root "$RUNNER_TEMP/qa-smoke" \
+            --dataset "$RUNNER_TEMP/qa-smoke/dataset.json" \
+            --output "$RUNNER_TEMP/qa-smoke/validation.json" \
+            --expected-split synthetic --allow-synthetic
+          python benchmarks/evaluate_knowledge_qa.py \
+            --root "$RUNNER_TEMP/qa-smoke" \
+            --dataset "$RUNNER_TEMP/qa-smoke/dataset.json" \
+            --output "$RUNNER_TEMP/qa-smoke/report.json" \
+            --backend tfidf --max-cases 8 --expected-split synthetic --allow-synthetic
+      - uses: actions/upload-artifact@v4
+        with:
+          name: personal-memory-smoke-report
+          path: |
+            ${{ runner.temp }}/memory-smoke/report.json
+            ${{ runner.temp }}/memory-smoke/validation.json
+            ${{ runner.temp }}/qa-smoke/report.json
+            ${{ runner.temp }}/qa-smoke/validation.json
+
+  release:
+    name: Attach XPI to release
+    needs: [plugin, reproducible-build, backend]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build release artifact
+        run: python scripts/build_zotero_plugin.py | tee build.txt
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: output/zotero/*.xpi
+          body_path: build.txt

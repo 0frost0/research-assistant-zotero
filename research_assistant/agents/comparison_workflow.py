@@ -20,6 +20,7 @@ class Output(BaseModel):
 
 
 class Finding(Output):
+    # 兼容历史结果；新提示词要求使用固定研究维度。
     aspect: str = Field(min_length=1, max_length=100)
     statement: str = Field(min_length=1, max_length=1200)
     evidence_ids: list[str] = Field(min_length=1, max_length=8)
@@ -30,12 +31,27 @@ class PaperAnalysis(Output):
     gaps: list[str] = Field(max_length=6)
 
 
+class StudyProfile(Output):
+    """每篇论文的可比条件摘要；空白字段表示当前证据没有覆盖。"""
+
+    source: str = Field(min_length=1, max_length=500)
+    population: str = Field(default="", max_length=600)
+    method: str = Field(default="", max_length=600)
+    setting: str = Field(default="", max_length=600)
+    metric: str = Field(default="", max_length=600)
+    result: str = Field(default="", max_length=900)
+    condition: str = Field(default="", max_length=700)
+    limitation: str = Field(default="", max_length=700)
+    evidence_ids: list[str] = Field(default_factory=list, max_length=8)
+
+
 class Comparison(Finding):
     relation: Literal["agreement", "difference", "incomparable"]
 
 
 class Synthesis(Output):
     comparisons: list[Comparison] = Field(max_length=10)
+    profiles: list[StudyProfile] = Field(default_factory=list, max_length=4)
 
 
 class Verdict(Output):
@@ -59,8 +75,8 @@ evidence_ids 只能引用给定的 ref；source/page/原文由程序回填，不
 """
 
 ROLES = {
-    "analyst": (PaperAnalysis, "你是单篇文献分析员。只分析这篇文献，围绕问题提取研究对象、方法、结果和局限；各项结论须有支持它的证据。缺少的维度写入 gaps，不猜测。"),
-    "synthesizer": (Synthesis, "你是对照综合员。围绕问题输出共识、差异或不可比之处。每项比较至少引用两篇不同文献的文字证据。分析员输出仅为草稿，应回到证据，不得把缺失当成负面结论。"),
+    "analyst": (PaperAnalysis, "你是单篇文献分析员。只分析这篇文献，使用固定维度 aspect：population（研究对象/样本）、method（方法/干预）、setting（数据集/实验设置）、metric（指标）、result（结果/结论）、condition（适用条件）、limitation（局限）。各项结论须有支持它的证据；缺少的维度写入 gaps，不猜测。"),
+    "synthesizer": (Synthesis, "你是对照综合员。先为每篇论文填写 profiles（只填证据明确支持的固定维度），再围绕问题输出共识、差异或不可比之处。每项 profile 和 comparison 都必须引用证据；每项跨论文比较至少引用两篇不同文献的文字证据。不同样本、数据集、时间窗或指标不能直接排名；原因若不是原文明确说明，写成待核实推测，不要冒充事实。分析员输出仅为草稿，应回到证据，不得把缺失当成负面结论。"),
     "reviewer": (Review, "你是独立复核员。逐条检查 comparisons（从 0 编号），对照原始证据判断陈述是否被支持、是否可比、是否遗漏证据限制。每条恰好给出一次 verdict。只有全部主张均有充分支持才能 supported；不确定为 uncertain，错误为 unsupported。不得补写新结论。"),
 }
 
@@ -152,6 +168,7 @@ class ComparisonWorkflow:
             sort_keys=True, ensure_ascii=False).encode()).hexdigest()
         phase_span = None
         analyses_done, candidates, reviews, warnings = {}, [], [], []
+        profiles_result = []
         evidence = evidence_map(documents)
 
         async def invoke(role, payload):
@@ -214,7 +231,7 @@ class ComparisonWorkflow:
             return {"analyses": [result]}
 
         async def synthesize(state):
-            nonlocal candidates
+            nonlocal candidates, profiles_result
             phase("synthesizing")
             good = [a for a in state["analyses"] if a["status"] == "ok"]
             if len(good) < 2:
@@ -225,6 +242,13 @@ class ComparisonWorkflow:
                     available = {ref: e for ref, e in evidence.items() if e["source"] in good_sources}
                     result = await invoke("synthesizer", {"question": question, "analyses": sorted(good, key=lambda a: a["source"]), "evidence": list(available.values())})
                     candidates = grounded(result.comparisons, available, minimum_sources=2)
+                    profiles = []
+                    for profile in result.profiles:
+                        local = {ref: e for ref, e in available.items() if e["source"] == profile.source}
+                        ids = list(dict.fromkeys(profile.evidence_ids))
+                        if profile.source in good_sources and ids and all(ref in local for ref in ids):
+                            profiles.append({**profile.model_dump(), "evidence_ids": ids})
+                    profiles_result = profiles
                     if len(candidates) != len(result.comparisons):
                         warnings.append("部分比较未引用至少两篇文献的有效文字证据，已移除。")
                 except Exception as exc:
@@ -273,11 +297,12 @@ class ComparisonWorkflow:
             warnings.append("部分文献未完成有效分析；结论仅覆盖所列证据，不代表全部所选文献。")
         if owns_trace:
             trace.finish("completed")
+        # profiles 只在综合阶段生成；若模型没有返回，则保留空列表并明确缺口。
         return {"summary": f"得到 {len(accepted)} 项通过单轮 AI 复核的比较，{len(withheld)} 项未通过或待核实。" if candidates else "本轮未形成可靠的跨文献比较，请查看单篇分析与证据缺口。",
                 "status": "degraded" if partial or warnings or withheld or not accepted else "ok",
-                "analyses": analyses, "comparisons": accepted, "withheld": withheld,
+                "analyses": analyses, "profiles": profiles_result, "comparisons": accepted, "withheld": withheld,
                 "documents": documents, "warnings": warnings,
                 "calls": calls, "call_budget": budget, "review_rounds": int(bool(candidates)),
                 "analyst_concurrency": self.analyst_concurrency,
                 "telemetry": trace.snapshot(),
-                "limitations": ["仅分析当前问题命中的片段，不是全文系统综述。", "单篇分析是 AI 草稿；AI 复核不是人工核验，也不能证明结论正确。", "本流程只向回答模型发送文字，图片像素未参与推理；表格精确值需核验原表。"]}
+                "limitations": ["仅分析当前问题命中的片段，不是全文系统综述。", "单篇分析和按篇条件摘要是 AI 草稿；AI 复核不是人工核验，也不能证明结论正确。", "本流程只向回答模型发送文字，图片像素未参与推理；表格精确值需核验原表。"]}

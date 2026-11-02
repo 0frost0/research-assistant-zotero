@@ -1,8 +1,61 @@
 # 科研文献与计划助手
 
-当前部署（2026-09-20）：项目运行于 `agent-assistant:/srv/research-assistant/app`，网页、Qdrant、Qwen 嵌入和 MinerU 均由远端 user systemd 服务管理，只监听服务器回环地址。本机运行 `scripts/start_agent_assistant_tunnel.ps1`，再访问 [阅读器](http://127.0.0.1:8765/reader)。本机项目和旧服务器均保留为回退副本；本次只从旧服务器复制了已授权的 Qwen3-VL-Embedding-2B 与 MinerU2.5-Pro-2605-1.2B，没有从公网下载模型权重。部署细节和验证证据见 [迁移报告](docs/deployment/agent-assistant迁移报告.md)。
+本地部署链路开发中：Zotero → 本地主后端／SQLite／Qdrant → 本地或远端 MinerU → 远端 Qwen API。服务面板的问答、嵌入及 MinerU 配置已接入代码，新增后台精析任务；本轮按要求未测试、打包、启动或远端部署，实际旧服务未切换。启动方法与边界见 [本地主后端与远端 Qwen](docs/deployment/本地主后端与远端Qwen.md)。密钥保存在后端 `.data/zotero/service-config.json`，是文件权限保护的明文存储；配置分组不是独立用户认证。
 
-模型 API 在服务器 `/srv/research-assistant/app/.env` 修改，文件权限为 `600`。问答与 Agent 使用 `OPENAI_API_KEY`、`OPENAI_MODEL`、`OPENAI_BASE_URL`；全文/选区翻译默认复用这三项，也可用 `TRANSLATION_API_KEY`、`TRANSLATION_MODEL`、`TRANSLATION_BASE_URL` 单独覆盖。修改后执行 `ssh agent-assistant "systemctl --user restart research-assistant-web"`，无需重启 Qdrant、MinerU 或嵌入服务。不要把密钥写入 README 或提交到仓库。
+**2026-10-06 使用体验更新**：刷新保留正在编辑的笔记，切换编辑目标前保护未保存内容；专题笔记引用直接打开当时的版本与来源，并提示后续修订／归档。见 [五分钟演示与面试主线](docs/演示与面试主线.md)。本次定向 Node 检查 16 项通过；不以测试数量代表科研效果。
+
+**2026-10-05：Zotero 有据问答 + 个人文献记忆闭环持续完善。** 插件支持原文证据问答、带来源摘录创建专题笔记、revision 历史、归档，以及把“论文原文依据”和“你的个人记录”分开回答的组合问答；多文献条件对照保留首版，暂不继续扩展。详见 [个人文献记忆交付](docs/个人文献记忆交付.md)。
+
+安装包：`output/zotero/research-assistant-0.3.0.xpi`（未发布 Release，未替换正式插件）。2026-10-06 本地回归总计 335 项：318 通过、17 环境跳过；Node 14 项通过。最新原生 Zotero 隔离验收通过笔记计数、分区问答、来源跳转和草稿确认；使用合成资料与模拟模型，不代表真实科研质量。构建校验和见 [插件说明](deployment/zotero/README.md)。
+
+Zotero 插件 + Python 检索后端。在自己的文献库上做**带出处的多模态问答**：文字、图表、图注统一编码进同一向量空间，回答只引用检索到的原文片段，并附来源文件、物理页码和 bbox。工作台支持同一知识库范围内的有限追问上下文，但历史回答永远不能代替当前原文证据。
+
+- **插件端**：零依赖的 Zotero 9 bootstrapped 扩展（`deployment/zotero/`），把选中分类的条目与批注推送给后端，按分类建立隔离的知识库。
+- **后端**：FastAPI + SQLite（原始对象与修订号）+ Qdrant（向量）+ Qwen3-VL-Embedding-2B（2048 维，文字与图片共用一个 collection）。
+- **证据优先**：检索结果先经 `select_evidence()` 过滤与上下文补全，再交给大模型；未核验的图表转写折叠保存，不进入可引用正文。
+- **可观测问答**：每次回答记录 answer/review/rewrite 角色、成功/超时/解析失败/取消、耗时和真实用量是否已知；轨迹只保存白名单统计，不保存问题、论文摘录或密钥。
+- **可复现评测**：可从当前 Zotero 知识库生成不含 gold 的人工核对模板；研究者确认页码和摘录后，才进入 development/test 数据集，避免把检索结果或模型回答冒充标准答案。
+- **个人记忆评测**：可单独生成带 revision 和来源链接的笔记核对模板，论文事实与个人理解使用不同 validator 和指标。
+- **人工封存评测集**：`approve_personal_memory_candidates.py` 只接受 `scope=notes` 候选，重新核对当前 revision、确认状态和摘录后才写入 development/test，避免把日常反馈直接冒充 gold。
+
+## 检索评测结果
+
+固定开发集：3 份资料、4169 个向量点（4037 文字 + 132 图片与图注联合）；18 道正例（文字/图片/混合各 6）+ 2 道无答案对照 + 4 道自匹配检查。两列在**同一批 200 候选**上取前 10，因此是策略对照而非独立运行波动。
+
+| 期望证据 | 旧策略 显示 R@10 | `research-context-v2` 显示 R@10 | 上下文 R@10 |
+| --- | ---: | ---: | ---: |
+| 文字，6 题 | 50.0% | 83.3% | 100.0% |
+| 图片，6 题 | 50.0% | 100.0% | 100.0% |
+| 混合，6 题 | 41.7% | 66.7% | 66.7% |
+| **宏平均，18 题** | **47.2%** | **83.3%** | **88.9%** |
+
+显示 MRR@10 由 0.435 升至 0.564。**根因不在嵌入模型**：原始 R@10 始终是 83.3%，旧策略的"每来源最多 3 条"硬配额把它截断到 47.2%。改为按出处补回同一原始块（至多 1800 字符）并合并重复上下文后，损失基本消除。
+
+诚实的边界，不要当作验收通过：
+
+- 这是 18 道**开发题**的检索指标，不是回答正确率，也不是独立测试集；标准答案为助手草拟，真实人工评分 0 条。
+- 网页默认 K=5 时 ID R@5 只有 66.7%、上下文 R@5 为 72.2%，不能用 K=10 掩盖默认配置的遗漏。
+- **2/2 无答案对照仍返回阈值以上候选**：检索层不会把“没有答案”误判成“没有候选”；问答层现已增加一轮 `question_relevant` 范围复核来拒绝仅主题相关的证据，但真实用户集上的拒答率尚未测量。混合题 M03 仍未命中期望证据，M05/M06 仅部分命中。
+- 原始页码召回 100% 但证据召回不足，说明同页命中的常是标题或参考文献等无用内容。
+
+完整口径、逐题 delta 与方法学限制见 [多模态检索评测报告](benchmarks/多模态检索评测报告.md)。
+
+## 工程保障
+
+- **可恢复的个人记忆**：Zotero 导出包保留原件、笔记历史和可选问答统计；恢复命令拒绝覆盖现有目录，磁盘写入故障保留旧备份。范围与用法见 [备份说明](deployment/zotero/README.md#知识库备份与恢复)。
+
+- **可复现构建**：`scripts/build_zotero_plugin.py` 与 `deployment/zotero/build.py` 共用同一份资产清单，zip 时间戳固定，同一份源码产出字节一致的 XPI 并打印 SHA-256。
+- **CI**（`.github/workflows/ci.yml`）：插件契约测试（`node --test`）、知识库测试、两个构建入口的校验和一致性比对；打 `v*` tag 自动发布 XPI。
+- **检索回归门禁**：`scripts/check_retrieval.ps1` 在固定评测集上比对旧基线，任一开发题的上下文 R@10 退步即以退出码 2 失败。
+- **增量同步**：条目按 `revision` 跳过重复嵌入；检索前用 `corpus_signature()` 只读 `(id, revision)` 判断语料是否变化，未变更则完全不加载页文字。
+
+## 部署现状
+
+当前部署（2026-10-06）：项目运行于 `zotero-assistant-new:/home/ubuntu/research-assistant/app`，数据和 release 快照位于 `/mnt/research-data/research-assistant`。网页、Qdrant、Qwen 嵌入和 MinerU 由四个 systemd 服务管理，只监听服务器回环地址。本机运行 `scripts/start_agent_assistant_tunnel.ps1`，再访问 [阅读器](http://127.0.0.1:8765/reader)。本机和旧服务器均保留为回退副本；没有删除用户文献、模型或 SQLite。最近一次发布经过健康检查，部署包只覆盖项目代码、测试和文档；具体 release 时间见 [问题排查笔记](问题排查笔记.md)。部署细节和验证证据见 [迁移报告](docs/deployment/agent-assistant迁移报告.md)，报告顶部标注当前状态，后续旧段落仅为历史记录。
+
+模型 API 在服务器 `/home/ubuntu/research-assistant/app/.env` 修改，文件权限为 `600`。问答与 Agent 使用 `OPENAI_API_KEY`、`OPENAI_MODEL`、`OPENAI_BASE_URL`；全文/选区翻译默认复用这三项，也可用 `TRANSLATION_API_KEY`、`TRANSLATION_MODEL`、`TRANSLATION_BASE_URL` 单独覆盖。修改后执行 `ssh zotero-assistant-new "sudo systemctl restart research-assistant-web"`，无需重启 Qdrant、MinerU 或嵌入服务。不要把密钥写入 README 或提交到仓库。
+
+插件认证后的 `/api/knowledge/status` 还返回不含正文的运行计数：知识库、文献、外部 Zotero 记录、已确认个人笔记，以及问答任务状态和 `scope=notes` 任务数。它用于判断真实使用是否已经产生可评测的个人记忆样本，不返回问题、摘录或密钥。
 
 ## 中文阅读、划线与长期笔记
 
@@ -26,7 +79,7 @@
 
 选区模式每次最多 2400 字符、一次模型请求、30 秒超时，不自动重试；每日最多 20 个新请求及 20000 token 预留/记账额度。这是选区路径的本地限制，不是全项目人民币预算。未返回用量的失败保留预留，整篇翻译仍为独立的较高消耗选项。源码依据、实现和模拟验证见 [Zotero 按需翻译借鉴报告](docs/reading/Zotero按需翻译借鉴与实现.md)。
 
-无需模型即可阅读原件、划线、保存/修改/归档笔记、查历史和检索自己的记录。写笔记先选择文字或从证据卡片带入出处。每次编辑追加 revision；多窗口冲突保留输入。中文译文可下载，旧译文与原件按哈希永久保留，删除当前检索资料不会删除阅读归档。
+无需模型即可阅读原件、划线、保存/修改/归档笔记、查历史和检索自己的记录。写笔记先选择文字或从证据卡片带入出处。每次编辑追加 revision；多窗口冲突保留输入；来源摘录另有逐字核验状态，未核验记录不会伪装成原文证据。中文译文可下载，旧译文与原件按哈希永久保留，删除当前检索资料不会删除阅读归档。个人记录遇到词面完全不匹配的模糊问题时，最多额外做一次检索词改写和一次回答；改写不产生事实，也不会把论文原文混入个人记录。问答结果还可选择性提交反馈，反馈只生成待审核评测候选，不会自动改变笔记或标准答案。
 
 翻译当前限定有文字层英文 PDF；扫描/低文字页保守拦截，复杂公式表格需核对。进度来自真实引擎；成功仅表示自动产物检查通过，不能替代翻译质量验收。实际缺陷、数据库迁移、来源规则、测试结果和五分钟演示见 [完整设计与验收报告](docs/reading/设计与验收.md)。[引擎选择与 AGPL 影响](docs/reading/翻译引擎与许可证.md)必须在发布或公开部署前阅读；本轮未擅自重新许可整个仓库。
 
@@ -38,6 +91,8 @@
 & D:\miniconda3\envs\deepagents\python.exe -B scripts/reading_live_check.py
 # 隔离浏览器验收：8766，测试笔记放在 output/，不进入正式数据库
 & D:\miniconda3\envs\deepagents\python.exe -B scripts/reading_preview.py
+# Zotero 原生隔离验收：自动等待 8771/2832 ready，只清理自己启动的 fixture 进程
+& .\benchmarks\run_zotero_native_fixture.ps1 -Target output/zotero/native-fixture-run
 ```
 
 实际中文找回小样本：关键词 4/4、模糊问法 2/4、无答案未召回 4/4；不能当作整体准确率。真实合成双栏翻译与真实 AI 草稿/笔记问答已经验证。用户授权后，MDAgent 前两页已通过 DeepSeek 真实翻译，但摘要漏译、作者及脚注排版异常，**质量验收不通过**；已补充长段未译原文拦截。详见 [真实论文两页验收报告](docs/reading/MDAgent两页翻译验收.md)，不得把该节选当作完整论文译文。
@@ -267,12 +322,18 @@ Qwen 权重保存在远程项目 `models/Qwen3-VL-Embedding-2B`。服务通过 G
 
 - 评测：当前有 18 道开发正例（文字/图片/混合证据各 6）、2 道无答案对照、4 道图像输入自匹配检查。标准答案是助手草拟的开发标注，不是人工金标准。`query_type` 表示期望证据类别，`input_modality` 单独表示输入是否含图片。
 - 在“原始向量排名”和“网页显示排名”之间切换，可查看 Recall@1/3/5/10、MRR@10、页码召回。人工审阅是可选的质量核验：仅需对抽样或关键题核对原文，主动确认期望证据、填写审阅人并给结果打 0~3 分。日常提问无需填写这些表单；未评分不记为 0 分。
+- 运行中点击“确认标准答案”后，可用“导出已确认测试集”冻结只含人工确认 case 的 JSON。导出会去掉排名、模型输出、AI 判断和人工备注，并固定 `split=test`；没有人工确认时按钮不可用，AI 辅助标注不会触发导出。
+- 也可在项目根目录运行 `python benchmarks/export_approved_dataset.py --root . --run-id <运行ID> --output benchmarks/datasets/<版本>.json`，用于把已确认集纳入后续离线评测或 CI；没有人工确认时命令失败，不会生成空集。
 - 表格：按来源/关键词检索、分页浏览、核对原 PDF 和截图。当前 125 张表、2890 个锚点单元格；113 张结构可解析，12 张缺少 HTML，不能靠截图伪造单元格。
 - SQL：只允许读取 `research_tables`、`table_cells` 的受限 SELECT/WITH；最多返回 200 行，超时约 2 秒。选择表格后，可载入“当前表单元格”查询。`row_index`/`column_index` 从 0 开始，页码从 1 开始。含单位、百分号、千分位的数值仍保留原文，不擅自转换。
 
 表格在访问表格 API 时同步现有 MinerU 缓存；未变化的来源会跳过。它不重新 OCR、不调用 Qwen，也不重建向量库。目前表格查询是独立的网页检索/SQL 路径，**没有自动接入 DeepSeek 的 SQL Agent**。
 
 评测数据：`benchmarks/multimodal_eval_v1.json`；不可变运行快照与人工评分：`.data/evaluations.sqlite3`；结构化表格：`.data/tables.sqlite3`。文献内容和版本改变时旧评测集会拒绝运行。修改标准答案必须建立新版本并重新确认，不能用新资料冒充旧评测。
+
+个人记忆评测使用 `benchmarks/validate_personal_memory_dataset.py` 先核对当前 revision、确认状态、归档状态和摘录；再用 `benchmarks/evaluate_personal_memory.py --expected-split test` 运行封存测试集。开发集应单独标记为 `split=development`，不能通过该参数冒充测试集。
+
+原文问答评测先运行 `benchmarks/validate_knowledge_qa_dataset.py`，核对当前知识库中的 PDF 来源、页码和逐字摘录，再使用 `benchmarks/evaluate_knowledge_qa.py --expected-split test`；split 不一致、错误页码或不存在的摘录会直接拒绝。合成 smoke 必须显式 `--allow-synthetic`，不会冒充真实科研质量。
 
 在项目目录执行真实评测（只使用指定远程 Qwen 服务和本机 Qdrant，不调用 DeepSeek）：
 

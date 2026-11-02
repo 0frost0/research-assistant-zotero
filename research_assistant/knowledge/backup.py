@@ -11,13 +11,28 @@ from research_assistant.knowledge.store import digest, encoded, now
 
 TABLES = {"kb_schema", "knowledge_bases", "objects", "entities", "entity_revisions",
           "memberships", "local_notes", "note_revisions"}
+# Created lazily by record_qa_run. Older backups legitimately lack telemetry;
+# newer backups must remain restorable after the first successful question.
+OPTIONAL_TABLES = {"qa_runs", "parsing_jobs"}
 
 
 def export_backup(store, destination):
-    with tempfile.TemporaryDirectory() as temporary, store.lock:
+    destination = Path(destination)
+    # Stage on the destination filesystem so publication is an atomic rename.
+    # A failed ZIP write must not truncate an earlier usable backup.
+    with tempfile.TemporaryDirectory(prefix=".research-backup-", dir=destination.parent) as temporary, store.lock:
         database = Path(temporary) / "knowledge.sqlite3"
-        with closing(sqlite3.connect(store.path)) as source, closing(sqlite3.connect(database)) as target:
+        with closing(sqlite3.connect(store.path.resolve().as_uri() + "?mode=ro", uri=True)) as source, closing(sqlite3.connect(database)) as target:
             source.backup(target)
+            # Rebuildable parser cache is deliberately excluded. Strip host-local
+            # image paths from the backup copy, never from the live database.
+            for sha, raw in target.execute("SELECT hash,report FROM objects").fetchall():
+                report = json.loads(raw)
+                report.pop("mineru", None)
+                target.execute("UPDATE objects SET report=? WHERE hash=?", (encoded(report), sha))
+            if target.execute("SELECT 1 FROM sqlite_master WHERE name='parsing_jobs'").fetchone():
+                target.execute("DELETE FROM parsing_jobs")
+            target.commit()
             hashes = [row[0] for row in target.execute("SELECT hash FROM objects")]
             # Human-readable notes supplement the authoritative database snapshot.
             notes = [{"id": r[0], "revision": r[1], **json.loads(r[2])}
@@ -31,7 +46,8 @@ def export_backup(store, destination):
                 raise ValueError("附件缺失或损坏，拒绝发布不完整备份。")
             files["objects/" + sha + ".pdf"] = path
         manifest = {"format": "research-zotero-backup", "version": 1, "created_at": now(), "files": {}}
-        with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        staged_archive = Path(temporary) / "backup.zip"
+        with zipfile.ZipFile(staged_archive, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             for name, path in files.items():
                 content = path.read_bytes()
                 manifest["files"][name] = digest(content)
@@ -43,6 +59,8 @@ def export_backup(store, destination):
                 manifest["files"][name] = digest(content)
                 archive.writestr(name, content)
             archive.writestr("manifest.json", encoded(manifest))
+        staged_archive.chmod(0o600)
+        staged_archive.replace(destination)
 
 
 def restore_backup(archive_path, root):
@@ -77,8 +95,13 @@ def restore_backup(archive_path, root):
         database = Path(temporary) / "knowledge.sqlite3"
         with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as con:
             tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-            if tables != TABLES or con.execute("SELECT 1 FROM sqlite_master WHERE type IN ('view','trigger')").fetchone():
+            if (not TABLES.issubset(tables) or tables - TABLES - OPTIONAL_TABLES
+                    or con.execute("SELECT 1 FROM sqlite_master WHERE type IN ('view','trigger')").fetchone()):
                 raise ValueError("备份数据库结构不兼容。")
+            if "qa_runs" in tables:
+                columns = [row[1] for row in con.execute("PRAGMA table_info(qa_runs)")]
+                if columns != ["id", "created_at", "metrics"]:
+                    raise ValueError("问答统计表结构不兼容。")
             if con.execute("PRAGMA quick_check").fetchone()[0] != "ok" or con.execute("PRAGMA foreign_key_check").fetchall():
                 raise ValueError("备份数据库完整性校验失败。")
             if con.execute("SELECT MAX(version) FROM kb_schema").fetchone()[0] != 1:
@@ -92,3 +115,24 @@ def restore_backup(archive_path, root):
         shutil.copy2(database, home / "knowledge.sqlite3")
         shutil.copytree(Path(temporary) / "objects", home / "objects") if (Path(temporary) / "objects").exists() else (home / "objects").mkdir()
     return root
+
+
+def main(argv=None):
+    """Restore the plugin's exported ZIP without loading models or the web app."""
+    import argparse
+    parser = argparse.ArgumentParser(description="校验并恢复 Zotero 知识库备份，仅写入尚不存在的新目录")
+    parser.add_argument("--archive", type=Path, required=True)
+    parser.add_argument("--target", type=Path, required=True)
+    args = parser.parse_args(argv)
+    root = restore_backup(args.archive, args.target)
+    database = root / ".data/zotero/knowledge.sqlite3"
+    with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as con:
+        counts = {table: con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                  for table in ("knowledge_bases", "objects", "entities", "local_notes", "note_revisions")}
+    print(encoded({"status": "restored", "target": str(root), "counts": counts,
+                   "archive_sha256": digest(args.archive.read_bytes()),
+                   "credentials_included": False, "model_calls": 0}))
+
+
+if __name__ == "__main__":
+    main()

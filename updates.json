@@ -1,0 +1,48 @@
+{
+  "addons": {
+    "research-assistant@local": {
+      "updates": [
+        {
+          "version": "0.3.5",
+          "update_link": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.5/research-assistant-0.3.5.xpi",
+          "applications": {"zotero": {"strict_min_version": "9.0", "strict_max_version": "9.*"}}
+        },
+        {
+          "version": "0.3.4",
+          "update_link": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.4/research-assistant-0.3.4.xpi",
+          "applications": {"zotero": {"strict_min_version": "9.0", "strict_max_version": "9.*"}}
+        },
+        {
+          "version": "0.3.3",
+          "update_link": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.3/research-assistant-0.3.3.xpi",
+          "applications": {"zotero": {"strict_min_version": "9.0", "strict_max_version": "9.*"}}
+        },
+        {
+          "version": "0.3.2",
+          "update_link": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.2/research-assistant-0.3.2.xpi",
+          "applications": {"zotero": {"strict_min_version": "9.0", "strict_max_version": "9.*"}}
+        },
+        {
+          "version": "0.3.1",
+          "update_link": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.1/research-assistant-0.3.1.xpi",
+          "applications": {"zotero": {"strict_min_version": "9.0", "strict_max_version": "9.*"}}
+        },
+        {
+          "version": "0.3.0",
+          "update_link": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.0/research-assistant-0.3.0.xpi",
+          "applications": {"zotero": {"strict_min_version": "9.0", "strict_max_version": "9.*"}}
+        },
+        {
+          "version": "0.2.0",
+          "update_link": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.2.0/research-assistant-0.2.0.xpi",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "9.0",
+              "strict_max_version": "9.*"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
