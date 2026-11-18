@@ -1,0 +1,48 @@
+{
+  "date": "2026-11-19",
+  "release": "https://github.com/0frost0/research-assistant-zotero/releases/tag/v0.4.0-go-core",
+  "source_commit": "6929f3bbbbd1d2e2bcb3741a56583000ca51dad1",
+  "go_version": "go1.27.3",
+  "build_command": "go build -trimpath -o <external-output> ./cmd/researchd",
+  "vcs_modified": false,
+  "source_archive_matches_git_blobs": true,
+  "repeat_build_same_sha256": true,
+  "rebuild_script": "scripts/build_go_release.py",
+  "assets_sha256_verified_against_github": {
+    "research-assistant-go-core-6929f3b-git.zip": "b0f20f02c3e56db38246c99beb5a43a55cbfdfd6cbf396735193b9bec315afaf",
+    "researchd-windows-amd64-6929f3b-clean.exe": "a9c7dc8230a5c345970ff12875b7496b130961a57019ec13a4286c2abc99d5c4",
+    "go-core-6929f3b-clean-provenance.json": "ca59d8a22ef852141f2240c96e176380cb0ff1a976c5e05a2b895fcfbcb9cad0"
+  },
+  "original_assets_retained": true,
+  "original_exe_provenance": {"vcs_revision_prefix": "a4c0c3f", "vcs_modified": true},
+  "original_source_difference": "Windows CRLF checkout; equals Git blobs only after newline normalization",
+  "ci_fix_commit_prefix": "a1f1334",
+  "ci": "https://github.com/0frost0/research-assistant-zotero/actions/runs/44342282197",
+  "ci_conclusion": "success",
+  "native_comparison": {
+    "private_run": "output/zotero/real-comparison-go-release-20261119",
+    "papers": ["MOTOR", "RePrompT"],
+    "requests": 1,
+    "model_calls": 4,
+    "status": "ok",
+    "profiles": 2,
+    "comparisons": 5,
+    "withheld": 0,
+    "review_rounds": 1,
+    "evidence_spans": 9,
+    "unmatched_quotes": 0,
+    "all_comparisons_have_two_sources": true,
+    "human_semantic_accuracy": null
+  },
+  "native_qa": {
+    "zotero_version": "10.0.8",
+    "cases": 5,
+    "answered": 4,
+    "no_evidence": 1,
+    "model_calls": 12,
+    "citations": 8,
+    "unmatched_quotes": 0,
+    "human_semantic_accuracy": null,
+    "private_run": "output/zotero/real-questions-go-release-20261119"
+  }
+}

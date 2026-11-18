@@ -9,7 +9,7 @@ import shutil
 import sqlite3
 
 
-def prepare(source, target, connection, base, port):
+def prepare(source, target, connection, base, port, comparison=False, workflow=False):
     source, target = source.resolve(), target.resolve()
     if not target.is_relative_to(source / "output"):
         raise ValueError("Target must be a new directory under project output/")
@@ -50,8 +50,23 @@ def prepare(source, target, connection, base, port):
     ]
     config = {"root": str(target), "connection": connection, "base": base,
               "endpoint": f"http://127.0.0.1:{port}", "cases": cases, "max_model_calls": 18}
+    script = "zotero_real_workflow.js" if workflow else "zotero_real_comparison.js" if comparison else "zotero_real_questions.js"
+    if workflow:
+        # Copy one real PDF to import through Zotero. Remove only its isolated
+        # object bytes so the bridge must exercise PUT rather than a cache hit.
+        with sqlite3.connect((home / "knowledge.sqlite3").as_uri() + "?mode=ro", uri=True) as db:
+            candidates = db.execute("SELECT hash FROM objects").fetchall()
+        pdf = min((home / "objects" / (sha + ".pdf") for (sha,) in candidates), key=lambda p: p.stat().st_size)
+        shutil.copy2(pdf, target / "workflow-paper.pdf")
+        config["workflow_sha"] = pdf.stem
+        pdf.unlink()
+        # This run explicitly submits parsing through the UI, not on sync.
+        config_path = home / "service-config.json"
+        services = json.loads(config_path.read_text(encoding="utf-8"))
+        services[connection]["mineru"]["auto_parse"] = False
+        config_path.write_text(json.dumps(services, ensure_ascii=False), encoding="utf-8")
     (target / "run-config.json").write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
-    js = (source / "benchmarks/zotero_real_questions.js").read_text(encoding="utf-8")
+    js = (source / "benchmarks" / script).read_text(encoding="utf-8")
     (plugin / "real-run.js").write_text(js.replace("__RUN_CONFIG__", json.dumps(config, ensure_ascii=False)), encoding="utf-8")
     bootstrap = (plugin / "bootstrap.js").read_text(encoding="utf-8")
     bootstrap = bootstrap.replace("for (const window of Zotero.getMainWindows()) bridgeScope.ResearchBridge.loadWindow(window);",
@@ -69,5 +84,8 @@ if __name__ == "__main__":
     p.add_argument("--connection", required=True)
     p.add_argument("--base", required=True)
     p.add_argument("--port", type=int, default=8776)
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument("--comparison", action="store_true", help="Run bounded native two-paper comparison instead of five QA cases")
+    mode.add_argument("--workflow", action="store_true", help="Run native sync, upload, note history and parsing on an isolated real PDF")
     a = p.parse_args()
-    prepare(a.source, a.target, a.connection, a.base, a.port)
+    prepare(a.source, a.target, a.connection, a.base, a.port, a.comparison, a.workflow)
