@@ -34,6 +34,18 @@
     "all_comparisons_have_two_sources": true,
     "human_semantic_accuracy": null
   },
+  "native_workflow_after_tag": {
+    "private_run": "output/zotero/real-workflow-go-release-20261119-r4",
+    "go_commit_prefix": "6929f3b",
+    "python_fix_commit_prefix": "4532c5a",
+    "real_pdf_uploads": 1,
+    "synced_entities": 2,
+    "note_revision_history_rendered": [1, 2],
+    "parsing_status": "succeeded",
+    "parsing_cached": false,
+    "qa_model_calls": 0,
+    "note_content": "isolated acceptance marker; not training or research QA data"
+  },
   "native_qa": {
     "zotero_version": "10.0.8",
     "cases": 5,
