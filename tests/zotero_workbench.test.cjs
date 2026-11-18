@@ -46,6 +46,48 @@ function snapshot(notes = []) {
   ], notes};
 }
 
+test('visual observations are labeled, scoped and cannot be saved as source-quote AI drafts', async () => {
+  const f = await fixture();
+  vm.runInContext("selected.add('one')", f.context);
+  const asset = {asset_id: 'V1', image_hash: 'hash', document_version: 'version'};
+  f.context.renderAnswer({status: 'answered', scope: 'original', claims: [{text: '蓝柱较高', citations: [{
+    kind: 'original', source_id: 'paper.pdf', page: 2, citation_type: 'visual', observation: '蓝柱高于橙柱',
+    visual_asset: asset}]}], evidence: [], gaps: [], warnings: [],
+    trace: {steps: [], model_calls: 2, retrieval_calls: 1, rewrite_rounds: 0, input_tokens: 0, output_tokens: 0}});
+  const nodes = [];
+  function visit(node) { nodes.push(node); for (const child of node.children) visit(child); }
+  visit(f.elements.get('results'));
+  assert.match(nodes.map(n => n.textContent).join('\n'), /模型视觉观察（非原文摘录）/);
+  assert.ok(!nodes.some(n => n.textContent === '保存为 AI 草稿'));
+  let read;
+  f.bridge.request = async (path, body) => {
+    read = {path, body};
+    return {...asset, source_id: 'paper.pdf', page: 2, data_url: 'data:image/png;base64,cGl4ZWxz'};
+  };
+  vm.runInContext("selected.clear(); selected.add('other')", f.context);
+  await nodes.find(n => n.textContent === '查看引用图片').handlers.click();
+  assert.equal(read.path, 'visual');
+  assert.deepEqual(Array.from(read.body.kb_ids), ['one']);
+  const row = nodes.find(n => n.className === 'answer-claim');
+  assert.ok(row.children.some(n => n.src === 'data:image/png;base64,cGl4ZWxz'));
+});
+
+test('experimental multimodal flag is opt-in and never applied to notes-only requests', async () => {
+  const f = await fixture();
+  vm.runInContext("selected.add('one')", f.context);
+  f.elements.get('query').value = 'chart';
+  const requests = [];
+  f.bridge.request = async (path, body) => { requests.push(body); return {results: [], backend: 'fixture'}; };
+  await f.context.runSearch({preventDefault() {}});
+  assert.equal(requests[0].multimodal, undefined);
+  f.elements.get('multimodalEvidence').checked = true;
+  await f.context.runSearch({preventDefault() {}});
+  assert.equal(requests[1].multimodal, true);
+  f.radios.forEach(r => r.checked = r.value === 'notes');
+  await f.context.runSearch({preventDefault() {}});
+  assert.equal(requests[2].multimodal, undefined);
+});
+
 test('index preparation polls without presenting an empty or failed search', async () => {
   const f = await fixture();
   vm.runInContext("selected.add('one')", f.context);
@@ -63,6 +105,80 @@ test('index preparation polls without presenting an empty or failed search', asy
   assert.equal(requests, 2);
   assert.match(f.elements.get('resultMeta').textContent, /0 条结果/);
   assert.equal(f.elements.get('searchButton').disabled, false);
+});
+
+test('sufficiency gate is opt-in, ask-only and excluded from the notes lane', async () => {
+  const f = await fixture();
+  vm.runInContext("selected.add('one')", f.context);
+  f.elements.get('query').value = 'evidence';
+  f.context.window.setInterval = () => 1;
+  f.context.window.clearInterval = () => {};
+  const requests = [];
+  f.bridge.request = async (path, body) => {
+    requests.push({path, body});
+    return path === 'search' ? {results: [], backend: 'fixture'} : {
+      state: 'succeeded', job_id: 'fixture', result: {
+        status: 'no_evidence', evidence: [], claims: [], gaps: [], warnings: [],
+        trace: {steps: [], model_calls: 0, retrieval_calls: 1, rewrite_rounds: 0}}};
+  };
+  const ask = () => f.context.runSearch({preventDefault() {}, submitter: {id: 'askButton'}});
+  await ask();
+  assert.equal(requests.at(-1).body.sufficiency_gate, undefined);
+  f.elements.get('sufficiencyGate').checked = true;
+  await f.context.runSearch({preventDefault() {}});
+  assert.equal(requests.at(-1).path, 'search');
+  assert.equal(requests.at(-1).body.sufficiency_gate, undefined);
+  for (const scope of ['both', 'original', 'notes']) {
+    f.radios.forEach(r => r.checked = r.value === scope);
+    await ask();
+    assert.equal(requests.at(-1).path, 'ask-async');
+    assert.equal(requests.at(-1).body.sufficiency_gate, scope === 'notes' ? undefined : true);
+  }
+});
+
+test('sufficiency trace displays uncalibrated judgment without invented draft counts', async () => {
+  const f = await fixture();
+  f.context.renderAnswer({status: 'no_evidence', evidence: [], claims: [], gaps: [], warnings: [],
+    trace: {model_calls: 2, retrieval_calls: 2, rewrite_rounds: 1, input_tokens: 0, output_tokens: 0, steps: [
+      {stage: 'sufficiency', round: 1, sufficient: false, selected: 6},
+      {stage: 'sufficiency', round: 2, sufficient: true, selected: 4}]}});
+  const texts = [];
+  function visit(node) { texts.push(node.textContent); for (const child of node.children) visit(child); }
+  visit(f.elements.get('results'));
+  const output = texts.join('\n');
+  assert.match(output, /证据不足，未生成/);
+  assert.match(output, /可尝试生成（模型判断）/);
+  assert.match(output, /未经独立校准/);
+  assert.doesNotMatch(output, /undefined|草稿|已采纳/);
+});
+
+test('QA trace distinguishes the search pool from passages read by the answer model', async () => {
+  const f = await fixture();
+  f.context.renderAnswer({status: 'no_evidence', evidence: [], claims: [], gaps: [], warnings: [],
+    trace: {model_calls: 1, retrieval_calls: 2, rewrite_rounds: 0, elapsed_ms: 1000,
+      input_tokens: 0, output_tokens: 0, steps: [{stage: 'retrieve', round: 1,
+        query: '什么是心衰', searches: [{query: '什么是心衰'}, {query: 'heart failure definition'}],
+        candidates: 35, selected: 6, new_selected: 6, elapsed_ms: 500}]}});
+  const texts = [];
+  function visit(node) { texts.push(node.textContent); for (const child of node.children) visit(child); }
+  visit(f.elements.get('results'));
+  assert.match(texts.join('\n'), /heart failure definition/);
+  assert.match(texts.join('\n'), /35 条去重候选 \/ 6 条供本轮回答 \/ 6 条首次入选/);
+  assert.match(f.elements.get('resultMeta').textContent, /检索 2 次/);
+});
+
+test('personal-memory rewrite shows a search step and no nonexistent review', async () => {
+  const f = await fixture();
+  f.context.renderAnswer({status: 'no_evidence', scope: 'notes', evidence: [], claims: [], gaps: [],
+    trace: {model: 'fixture-model', model_calls: 1, retrieval_calls: 2, rewrite_rounds: 1,
+      elapsed_ms: 20, input_tokens: 2, output_tokens: 2,
+      steps: [{stage: 'memory_rewrite', scope: 'notes', round: 1, query: 'irregular EHR intervals', candidates: 1}]}});
+  const texts = [];
+  function visit(node) { texts.push(node.textContent); for (const child of node.children) visit(child); }
+  visit(f.elements.get('results'));
+  assert.match(texts.join('\n'), /检索词改写：irregular EHR intervals/);
+  assert.match(texts.join('\n'), /回答模型：fixture-model/);
+  assert.doesNotMatch(texts.join('\n'), /undefined|复核模型/);
 });
 
 test('scope hints count both raw Zotero entities and local notes, excluding drafts and archived notes', async () => {

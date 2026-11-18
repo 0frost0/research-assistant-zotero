@@ -30,10 +30,12 @@
       <fieldset id="serviceConfigFields">
         <label for="serviceLlmBaseUrl">问答 API 地址</label>
         <input id="serviceLlmBaseUrl" type="url" required="required" />
+        <p class="muted">填写 API 基础地址，例如 https://api.deepseek.com 或服务商提供的 /v1 地址；粘贴完整 /chat/completions 地址时会自动去掉接口路径。</p>
         <label for="serviceLlmModel">问答模型名称</label>
         <input id="serviceLlmModel" maxlength="200" required="required" />
         <label for="serviceLlmKey">问答 API Key</label>
         <input id="serviceLlmKey" type="password" autocomplete="new-password" />
+        <label class="check"><input id="serviceLlmImages" type="checkbox" />我已确认此回答模型/API 支持图片输入（实验；回答与复核使用同一模型）</label>
         <label for="serviceEmbeddingBaseUrl">Qwen 多模态嵌入 API 地址</label>
         <input id="serviceEmbeddingBaseUrl" type="url" required="required" />
         <label for="serviceEmbeddingModel">嵌入模型名称</label>
@@ -106,6 +108,8 @@
           <label><input type="radio" name="scope" value="notes" /><span>仅笔记</span></label>
         </div>
         <p id="scopeHint" class="muted">论文原文与个人笔记分开回答；最多补检索一次。点击后将证据发送至已配置模型。</p>
+        <label class="check"><input id="multimodalEvidence" type="checkbox" />实验：图文证据（每轮最多两张图片；生成前检查与复核可能重发并增加计费；仅笔记不适用）</label>
+        <label class="check"><input id="sufficiencyGate" type="checkbox" />实验：生成前证据检查（增加模型检查；不足时最多补检索一次，仍不足则不生成）</label>
       </form>
 
       <nav class="tabs" aria-label="知识库视图">

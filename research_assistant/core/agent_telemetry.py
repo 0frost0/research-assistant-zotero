@@ -101,9 +101,16 @@ def summarize_qa_trace(trace):
         item = {"stage": step.get("stage"), "round": step.get("round"),
                 "elapsed_ms": step.get("elapsed_ms")}
         for key in ("candidates", "selected", "draft_claims", "accepted",
-                    "question_relevant", "reused"):
+                    "question_relevant", "reused", "new_selected", "rotated", "filtered",
+                    "sufficient", "status", "supporting_ids"):
             if key in step:
                 item[key] = step[key]
+        if "searches" in step:
+            item["searches"] = [{k: s[k] for k in ("candidates", "elapsed_ms") if k in s}
+                                 for s in step["searches"]]
+        if "rerank" in step:
+            item["rerank"] = {k: step["rerank"][k] for k in ("status", "candidates", "elapsed_ms")
+                              if k in step["rerank"]}
         stages.append(item)
     calls = []
     known_tokens = 0
@@ -115,6 +122,8 @@ def summarize_qa_trace(trace):
                 "usage": call.get("usage", "unknown")}
         if call.get("error_type"):
             item["error_type"] = call["error_type"]
+        if type(call.get("images_sent")) is int:
+            item["images_sent"] = call["images_sent"]
         if type(call.get("input_tokens")) is int and type(call.get("output_tokens")) is int:
             item["input_tokens"] = call["input_tokens"]
             item["output_tokens"] = call["output_tokens"]
@@ -128,6 +137,12 @@ def summarize_qa_trace(trace):
         "retrieval_calls": trace.get("retrieval_calls", 0),
         "rewrite_rounds": trace.get("rewrite_rounds", 0),
         "correction_rounds": trace.get("correction_rounds", 0),
+        "algorithm": trace.get("algorithm"),
+        "selection": trace.get("selection"),
+        "sufficiency_gate": trace.get("sufficiency_gate"),
+        "sufficiency_calls": trace.get("sufficiency_calls", 0),
+        "supplementary_retrievals": trace.get("supplementary_retrievals", 0),
+        "gate_images_sent": trace.get("gate_images_sent", 0),
         "elapsed_ms": trace.get("elapsed_ms"),
         "unknown_usage_calls": trace.get("unknown_usage_calls", 0),
         "known_tokens": known_tokens if calls and known_tokens else None,

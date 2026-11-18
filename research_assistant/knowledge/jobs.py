@@ -171,13 +171,16 @@ class QAJobStore:
         for item in result.get("evidence", []) or []:
             evidence.append({key: item.get(key) for key in (
                 "evidence_id", "kind", "entity_id", "source_id", "revision", "title",
-                "page", "quote", "url", "source_status") if key in item})
+                "page", "quote", "url", "source_status", "modality", "visual_asset",
+                "document_version", "retrieval_evidence_id", "evidence_group_id") if key in item})
         claims = []
         for claim in result.get("claims", []) or []:
             claims.append({"text": claim.get("text"), "scope": claim.get("scope"),
                            "citations": [{key: cite.get(key) for key in (
                                "evidence_id", "support_quote", "quote", "source_id", "revision",
-                               "page", "url", "kind") if key in cite}
+                                "page", "url", "kind", "modality", "citation_type", "observation",
+                                "observation_source", "visual_asset", "document_version",
+                                "retrieval_evidence_id") if key in cite}
                                           for cite in claim.get("citations", [])]})
         snapshot = {"status": result.get("status"), "scope": result.get("scope"),
                     "revisions": result.get("revisions", {}), "evidence": evidence,
@@ -443,4 +446,3 @@ class QAJobStore:
         if not changed:
             return self.public(ident)
         return self.public(ident)
-

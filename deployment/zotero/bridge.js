@@ -204,7 +204,7 @@ var ResearchBridge = {
       const result = await setup.wait();
       if (result.exitCode !== 0) throw new Error(output.slice(-1500) || "依赖启动失败。");
       if (host && (!this.tunnelProcess || this.tunnelProcess.exitCode !== null)) {
-        this.tunnelProcess = await Subprocess.call({command: ssh, arguments: ["-N", "-L", "127.0.0.1:30001:127.0.0.1:30001", "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=3", host], stderr: "stdout"});
+        this.tunnelProcess = await Subprocess.call({command: ssh, arguments: ["-N", "-L", "127.0.0.1:30001:127.0.0.1:30001", "-L", "127.0.0.1:30000:127.0.0.1:30000", "-L", "127.0.0.1:30002:127.0.0.1:30002", "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=3", host], stderr: "stdout"});
         this.tunnelProcess.stdout.readString().catch(() => {});
       }
       await this.readLocalToken();
@@ -304,7 +304,20 @@ var ResearchBridge = {
   },
   async sync(window = Zotero.getMainWindow()) {
     if (this.busy) return window.alert("同步正在进行。");
-    const collection = Zotero.getActiveZoteroPane().getSelectedCollection();
+    const pane = Zotero.getActiveZoteroPane();
+    // Zotero 10 singular getters throw. Never pick an arbitrary collection
+    // from a multiple/mixed selection and upload the wrong scope.
+    let collection;
+    if (typeof pane.getSelectedCollections === "function") {
+      const collections = pane.getSelectedCollections();
+      const rows = typeof pane.getCollectionTreeRows === "function" ? pane.getCollectionTreeRows() : collections;
+      if (collections.length !== 1 || rows.length !== 1) {
+        return window.alert("请只选择一个分类后同步，不要同时选择资料库或多个分类。");
+      }
+      collection = collections[0];
+    } else {
+      collection = pane.getSelectedCollection();
+    }
     if (!collection) return window.alert("请先选择一个分类，不是整个资料库。");
     const subtree = window.confirm("是否包含当前分类的所有子分类？\n“取消”表示仅当前分类。");
     if (!window.confirm(`允许把“${collection.name}”${subtree ? "及子分类" : ""}中的 PDF、批注和笔记发送至 ${this.endpoint()}？\n不会自动翻译全文或调用生成模型。`)) return;

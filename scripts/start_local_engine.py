@@ -12,6 +12,9 @@ os.chdir(ROOT)
 def main():
     from dotenv import load_dotenv
     load_dotenv(ROOT / ".env")
+    # Optional local reranker uses the same authenticated profile and SSH tunnel.
+    # Failure is visible and preserves retrieval results; never a public endpoint.
+    os.environ.setdefault("RESEARCH_RERANKER_URL", "http://127.0.0.1:30002/rerank")
     # Never inherit the deployment host's bind address for the local desktop app.
     token_path = ROOT / ".data/zotero/connection-token"
     token_path.parent.mkdir(parents=True, exist_ok=True)

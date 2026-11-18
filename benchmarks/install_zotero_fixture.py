@@ -13,13 +13,14 @@ parser.add_argument(
     default=project_root / "output/zotero/native-fixture",
 )
 parser.add_argument("--addon", type=Path)
+parser.add_argument("--debugger-port", type=int, default=2832)
 args = parser.parse_args()
 root = args.fixture_root.resolve()
 addon_path = (args.addon or root / "plugin").resolve()
 diagnostic = root / "install-result.json"
 diagnostic.unlink(missing_ok=True)
 
-with socket.create_connection(("127.0.0.1", 2832), timeout=10) as client:
+with socket.create_connection(("127.0.0.1", args.debugger_port), timeout=10) as client:
     client.settimeout(100)
 
     def receive():

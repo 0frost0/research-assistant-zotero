@@ -1,0 +1,79 @@
+[
+  {
+    "source": "output/public-sufficiency-replay-20261118/development-score.json",
+    "sha256": "41e9b6ec18f1a947d444b61a35c526f08a69fa60b0690c899a32c7e920ddac26",
+    "published": "public-sufficiency-replay-20261118--development-score.json",
+    "published_sha256": "25e2a2981d51847c4a178b45746026708eb35f4e325f499bdaa3df19f46e27c9",
+    "transformation": "Remove invalid examples and raw text fields; retain aggregate scores and fingerprints"
+  },
+  {
+    "source": "output/public-sufficiency-replay-20261118/heldout-score.json",
+    "sha256": "27d6aaada5fde58ee31b1da77bf090d60313beb2548f548b1aff5ef594e4b5cf",
+    "published": "public-sufficiency-replay-20261118--heldout-score.json",
+    "published_sha256": "c7e8b2451c4f95eb7f4fbd40910802dfc62716856ac8374170d5b698cd947a61",
+    "transformation": "Remove invalid examples and raw text fields; retain aggregate scores and fingerprints"
+  },
+  {
+    "source": "output/public-sufficiency-replay-20261118/summary.json",
+    "sha256": "4bf0f75d9c73f40b07876cffd78bd1486f3c4483e24ca39593c2c0ef13b39685",
+    "published": "public-sufficiency-replay-20261118--summary.json",
+    "published_sha256": "6080877f1e55cf722d62a2df7ed07f979d49e4e55dd31608c047741055f40382",
+    "transformation": "Remove invalid examples and raw text fields; retain aggregate scores and fingerprints"
+  },
+  {
+    "source": "output/public-sufficiency-v1-20261115/pilot-certificate-v1/pilot-score.json",
+    "sha256": "58af0179fc81be2917cbd1f9e37960fa50997ab5e6c13350beb4245a75bb5453",
+    "published": "pilot-certificate-v1--pilot-score.json",
+    "published_sha256": "ecb26ccc1f019c3fb8320fb3ddee8a8171b53e01c54b9377cf7ba84fda0566db",
+    "transformation": "Remove invalid examples and raw text fields; retain aggregate scores and fingerprints"
+  },
+  {
+    "source": "output/public-sufficiency-v1-20261115/pilot-chain-balanced-v1/pilot-score.json",
+    "sha256": "441c841cab251a8638e09071f562cf75ef24245de02dff6a03c5b41cc2f7a3bb",
+    "published": "pilot-chain-balanced-v1--pilot-score.json",
+    "published_sha256": "fd8e198a64d6261f7e3f2f0afc0fca0ad1d05a7c898207168f927a9f6c2e0a1b",
+    "transformation": "Remove invalid examples and raw text fields; retain aggregate scores and fingerprints"
+  },
+  {
+    "source": "output/public-sufficiency-v1-20261115/pilot-chain-checklist-v1/pilot-score-chain-baseline.json",
+    "sha256": "c09e31836d8092907cc238c9eeed482521ff14d476cf6341c47fcbf83f12df48",
+    "published": "pilot-chain-checklist-v1--pilot-score-chain-baseline.json",
+    "published_sha256": "a1740f60f38b352c837df0a0834364f32b7c02944ff1a6620516441fcb3bdc93",
+    "transformation": "Remove invalid examples and raw text fields; retain aggregate scores and fingerprints"
+  },
+  {
+    "source": "output/public-sufficiency-v1-20261115/pilot-chain-checklist-v1/pilot-score-v2.json",
+    "sha256": "82706d4cbfef0933ae9d8627b868338f6a67de6a1cae0c78651b6dca6d16f178",
+    "published": "pilot-chain-checklist-v1--pilot-score-v2.json",
+    "published_sha256": "a0429bf073d1cc4b12518ad9d5df7e7eee8037ee0c78c18cb681996e477e677f",
+    "transformation": "Remove invalid examples and raw text fields; retain aggregate scores and fingerprints"
+  },
+  {
+    "source": "output/public-sufficiency-v1-20261115/pilot-chain-checklist-v1/pilot-score-v3.json",
+    "sha256": "a987e0d0bea99988a384a38c04fc627f9c4fab73ba2f30160cda6af338fbe249",
+    "published": "pilot-chain-checklist-v1--pilot-score-v3.json",
+    "published_sha256": "edd1ad9391b5e62d3bfe582fbd2ffef43d713421301692d4f1455960ca00120b",
+    "transformation": "Remove invalid examples and raw text fields; retain aggregate scores and fingerprints"
+  },
+  {
+    "source": "output/public-sufficiency-v1-20261115/pilot-chain-guard-v1/pilot-score-chain-baseline.json",
+    "sha256": "92691a808b5f2460a4bf80ff3db823ab8e61bbe89631f3739653131e23825c00",
+    "published": "pilot-chain-guard-v1--pilot-score-chain-baseline.json",
+    "published_sha256": "68b286b238f7e219d2858f92e93a1118961d2b326583849a8f02e3005221f62f",
+    "transformation": "Remove invalid examples and raw text fields; retain aggregate scores and fingerprints"
+  },
+  {
+    "source": "output/public-sufficiency-v1-20261115/pilot-chain-guard-v1/pilot-score-v4.json",
+    "sha256": "2e01ac236f6744e36a99bfea7256ffe32221fd52b079137c4534d777c9dacf9e",
+    "published": "pilot-chain-guard-v1--pilot-score-v4.json",
+    "published_sha256": "1de85bad88b9786bc5890068a92ec2bb26d6e7bb74a10cbc071a0589e38e41f8",
+    "transformation": "Remove invalid examples and raw text fields; retain aggregate scores and fingerprints"
+  },
+  {
+    "source": "output/public-sufficiency-v1-20261115/pilot-chain-strict-v1/pilot-score.json",
+    "sha256": "080094a9d1a0f632c7c58ff15e78706a5b2a02f41ed222060e18655cbb6ff3b8",
+    "published": "pilot-chain-strict-v1--pilot-score.json",
+    "published_sha256": "63f65f355d713f680b258ecf2a925894ad66ede12e3ffb865b2488887b44c7be",
+    "transformation": "Remove invalid examples and raw text fields; retain aggregate scores and fingerprints"
+  }
+]

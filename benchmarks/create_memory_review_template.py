@@ -9,6 +9,7 @@ No generation model is called.
 from __future__ import annotations
 
 import argparse
+import asyncio
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -26,7 +27,8 @@ from benchmarks.create_qa_review_template import (
 )
 from research_assistant.knowledge.jobs import QAJobStore
 from research_assistant.knowledge.qa import select_note_candidates
-from research_assistant.knowledge.service import KnowledgeService
+from research_assistant.knowledge.service import KnowledgeService, search_ready
+from research_assistant.core.service_context import stored_service_context
 from research_assistant.knowledge.store import KnowledgeStore
 
 
@@ -38,10 +40,11 @@ def build_template(root: Path, questions, backend="multimodal", top_k=10):
     cases = []
     for case in questions:
         snapshot = store.snapshot(case["kb_ids"])
-        found = service.search({"query": case["query"], "kb_ids": case["kb_ids"],
-                                "scope": "notes", "k": top_k})
+        found = asyncio.run(search_ready(service, {"query": case["query"], "kb_ids": case["kb_ids"],
+                                                   "scope": "notes", "k": top_k}))
         candidates = select_note_candidates(found.get("results", []), limit=top_k,
                                             char_budget=20_000)
+        store.assert_current(snapshot)
         records = [{key: item.get(key) for key in (
             "entity_id", "revision", "kind", "title", "quote", "source_id", "url", "page"
         ) if item.get(key) is not None} for item in candidates]
@@ -116,6 +119,7 @@ def main(argv=None):
     parser.add_argument("--allow-empty", action="store_true",
                         help="--qa-jobs 没有可用问题时生成 cases=[] 的 empty_history 模板")
     parser.add_argument("--model-config", type=Path)
+    parser.add_argument("--connection", help="读取 Zotero 服务面板保存的同一连接配置")
     args = parser.parse_args(argv)
     load_dotenv(args.model_config or args.root / ".env")
     if args.job_limit < 1 or args.job_limit > 1000:
@@ -128,7 +132,8 @@ def main(argv=None):
         questions = load_questions_from_jobs_allow_empty(args.qa_jobs, args.job_limit, "notes")
     else:
         questions = load_questions_from_jobs(args.qa_jobs, args.job_limit, "notes")
-    payload = build_template(args.root, questions, args.backend, args.top_k)
+    with stored_service_context(args.root, args.connection):
+        payload = build_template(args.root, questions, args.backend, args.top_k)
     write_atomic(args.output, payload)
     print(json.dumps({"output": str(args.output), "cases": len(payload["cases"]),
                       "status": payload["status"], "model_calls": 0}, ensure_ascii=False))

@@ -450,3 +450,5 @@ td {
     background: #244139;
   }
 }
+.visual-evidence { display: block; max-width: 100%; max-height: 640px; object-fit: contain; margin: 10px 0; }
+.visual-observation { border-left: 3px solid #b67718; padding-left: 10px; }

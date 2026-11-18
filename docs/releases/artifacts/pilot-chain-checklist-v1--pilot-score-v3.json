@@ -1,0 +1,138 @@
+{
+  "pairs": 32,
+  "skip": 64,
+  "baseline": "direct",
+  "provenance": {
+    "chain": {
+      "manifest_sha256": "6b704c92eb66ffc871bc2887dc660f1b617c3119ba5c2989644db0bbac9130f3",
+      "predictions_sha256": "edda1beb9ff28a5786a6a6a66d603c8a9577f75fbdbe53f28042eb05bd7aec66",
+      "prompt_sha256": "6ce29a4edacf1353a6a7550cbc5aa0fd67ea5b1926f5f8c2795a13926cdd07d2"
+    },
+    "chain_checklist": {
+      "manifest_sha256": "02d46daf342b72b8dbb56a1ba742936595cd2ea330d63bed9f49aa95865b7219",
+      "predictions_sha256": "dc170e7de170698802372b121815a91b70d48bcf63763ff4fe6a7329e6f5743d",
+      "prompt_sha256": "ca29c759632f4cf5fe9da3c9888b1eafbd5c6409b054accc2bc757feb79c550f"
+    },
+    "direct": {
+      "manifest_sha256": "31029317261ea97cb349946a528abe1767f82a206cf3942e40c9a7f790bb2db2",
+      "predictions_sha256": "2413429e81016a34a8db310d34dfdc4d5e23f510e7ea702cd0a8a939208fb10d",
+      "prompt_sha256": "f111c0d1611b09b7d25cf1e98b1e8189ff6e48be8093fd0feda0f8b6e947c614"
+    }
+  },
+  "inputs_sha256": "94d67e183215f02045f7364fb742cbc5cee281ac6de8c5b9c8b480dbcc154b17",
+  "gold_sha256": "f4a1e52a3a696e7b87e51c384f6ab0bec84bfeec50a99a4a4ce001692afbceaf",
+  "scores": {
+    "chain": {
+      "n": 64,
+      "counts": {
+        "negative": 32,
+        "tn": 28,
+        "positive": 32,
+        "fn_or_invalid": 17,
+        "tp": 15,
+        "invalid": 3,
+        "fp_or_invalid": 4,
+        "false_pass": 4
+      },
+      "balanced_accuracy": 0.671875,
+      "sufficient_recall": 0.46875,
+      "insufficient_failure_rate": 0.125,
+      "observed_false_pass_rate": 0.125,
+      "invalid_rate": 0.046875,
+      "both_sides_correct": 0.375
+    },
+    "chain_checklist": {
+      "n": 64,
+      "counts": {
+        "negative": 32,
+        "tn": 25,
+        "positive": 32,
+        "fn_or_invalid": 11,
+        "tp": 21,
+        "invalid": 3,
+        "fp_or_invalid": 7,
+        "false_pass": 5
+      },
+      "balanced_accuracy": 0.71875,
+      "sufficient_recall": 0.65625,
+      "insufficient_failure_rate": 0.21875,
+      "observed_false_pass_rate": 0.15625,
+      "invalid_rate": 0.046875,
+      "both_sides_correct": 0.46875
+    },
+    "direct": {
+      "n": 64,
+      "counts": {
+        "negative": 32,
+        "tn": 28,
+        "positive": 32,
+        "fn_or_invalid": 21,
+        "fp_or_invalid": 4,
+        "false_pass": 4,
+        "tp": 11
+      },
+      "balanced_accuracy": 0.609375,
+      "sufficient_recall": 0.34375,
+      "insufficient_failure_rate": 0.125,
+      "observed_false_pass_rate": 0.125,
+      "invalid_rate": 0.0,
+      "both_sides_correct": 0.28125
+    }
+  },
+  "comparisons": {
+    "chain": {
+      "delta": {
+        "balanced_accuracy": 0.0625,
+        "sufficient_recall": 0.125,
+        "insufficient_failure_rate": 0.0
+      },
+      "paired_bootstrap_95_accuracy_delta": [
+        -0.046875,
+        0.1875
+      ],
+      "meaningful_gain_passed": false,
+      "bootstrap": "5000 resamples of whole question pairs, seed17"
+    },
+    "chain_checklist": {
+      "delta": {
+        "balanced_accuracy": 0.109375,
+        "sufficient_recall": 0.3125,
+        "insufficient_failure_rate": 0.09375
+      },
+      "paired_bootstrap_95_accuracy_delta": [
+        -0.03125,
+        0.25
+      ],
+      "meaningful_gain_passed": false,
+      "bootstrap": "5000 resamples of whole question pairs, seed17"
+    }
+  },
+  "generation": {
+    "chain": {
+      "status_counts": {
+        "ok": 61,
+        "invalid_output": 3
+      },
+      "median_seconds": 4.843269016593695,
+      "output_tokens": 10476
+    },
+    "chain_checklist": {
+      "status_counts": {
+        "ok": 61,
+        "invalid_output": 3
+      },
+      "median_seconds": 5.683475002646446,
+      "output_tokens": 11792
+    },
+    "direct": {
+      "status_counts": {
+        "ok": 64
+      },
+      "median_seconds": 0.556633410975337,
+      "output_tokens": 448
+    }
+  },
+  "production_ready": false,
+  "boundary": "Exploratory reserve pilot; separate confirmation required. Failures counted incorrect, not repaired.",
+  "scorer_sha256": "5fba7f95004853c6c2e71fa9dafaed7d0cf250fa8557591c34cdde62db99e1f7"
+}

@@ -1,0 +1,68 @@
+{
+  "version": "musique-public-sufficiency-chain-balanced-pilot-v1",
+  "inputs_sha256": "601bb2ce011ffcfe740082fbdc5942e654fbb3f3735fc9cdfaf1bff46d63cc3e",
+  "gold_sha256": "14c28d9609f5961e68ea1b596b625bc9626cd6d5b400f42209e1fd9f7a286d4e",
+  "pairs": 32,
+  "scores": {
+    "direct": {
+      "n": 64,
+      "counts": {
+        "negative": 32,
+        "tn": 27,
+        "positive": 32,
+        "fn_or_invalid": 16,
+        "tp": 16,
+        "fp_or_invalid": 5,
+        "false_pass": 5
+      },
+      "balanced_accuracy": 0.671875,
+      "sufficient_recall": 0.5,
+      "insufficient_failure_rate": 0.15625,
+      "observed_false_pass_rate": 0.15625,
+      "invalid_rate": 0.0,
+      "both_sides_correct": 0.375
+    },
+    "balanced": {
+      "n": 64,
+      "counts": {
+        "negative": 32,
+        "tn": 30,
+        "positive": 32,
+        "tp": 15,
+        "invalid": 3,
+        "fn_or_invalid": 17,
+        "fp_or_invalid": 2,
+        "false_pass": 1
+      },
+      "balanced_accuracy": 0.703125,
+      "sufficient_recall": 0.46875,
+      "insufficient_failure_rate": 0.0625,
+      "observed_false_pass_rate": 0.03125,
+      "invalid_rate": 0.046875,
+      "both_sides_correct": 0.4375
+    }
+  },
+  "comparison": {
+    "delta": {
+      "balanced_accuracy": 0.03125,
+      "sufficient_recall": -0.03125,
+      "insufficient_failure_rate": -0.09375
+    },
+    "paired_bootstrap_95_accuracy_delta": [
+      -0.109375,
+      0.171875
+    ],
+    "meaningful_gain_passed": false,
+    "bootstrap": "5000 resamples of whole question pairs, seed17"
+  },
+  "status_counts": {
+    "direct": {
+      "ok": 64
+    },
+    "balanced": {
+      "ok": 61,
+      "invalid_output": 3
+    }
+  },
+  "boundary": "Reserve-only second pilot; no heldout tuning, no Zotero validation"
+}

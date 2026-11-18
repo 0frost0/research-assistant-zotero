@@ -293,6 +293,18 @@ class EvidenceStore:
             )
         return obsolete
 
+    def active_text_records(self) -> list[dict]:
+        """Canonical lexical candidates; never include staged/obsolete versions."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT e.* FROM evidence e JOIN documents d ON e.document_id=d.document_id "
+                "AND e.version=d.active_version WHERE e.active=1 ORDER BY e.evidence_id"
+            ).fetchall()
+        return [{**dict(row), "point_id": row["evidence_id"], "modality": "text",
+                 "chunk_index": row["ordinal"],
+                 "bbox": json.loads(row["bbox_json"]) if row["bbox_json"] else None}
+                for row in rows]
+
     def active_ids(self, evidence_ids: Iterable[str]) -> set[str]:
         values = list(evidence_ids)
         if not values:
@@ -451,6 +463,17 @@ class EvidenceStore:
                 (visual_id,),
             ).fetchone()
         return Path(row[0]).resolve() if row else None
+
+    def active_visual_identity(self, visual_id):
+        """Internal identity for binding retrieved pixels to a public asset."""
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT v.source,v.page,v.bbox_json,v.image_path,v.image_hash,v.document_version "
+                "FROM visual_assets v JOIN documents d ON d.document_id=v.document_id "
+                "AND d.active_version=v.document_version WHERE v.visual_id=? AND v.active=1",
+                (visual_id,),
+            ).fetchone()
+        return dict(row) if row else None
 
     def purge_inactive_visual(self) -> None:
         with self._connect() as connection:

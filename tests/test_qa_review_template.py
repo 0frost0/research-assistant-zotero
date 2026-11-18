@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from benchmarks.build_qa_smoke_corpus import build
 from benchmarks.create_qa_review_template import (
@@ -12,6 +13,26 @@ from research_assistant.knowledge.jobs import QAJobStore
 
 
 class QAReviewTemplateTests(unittest.TestCase):
+    def test_review_template_rejects_a_revision_change_during_search(self):
+        from research_assistant.knowledge.store import KnowledgeStore
+        from research_assistant.knowledge.service import KnowledgeService
+        from research_assistant.memory.store import Conflict
+        from benchmarks.create_memory_review_template import build_template as memory_template
+        for index, builder in enumerate((build_template, memory_template)):
+            with tempfile.TemporaryDirectory() as directory:
+                project = Path(directory) / str(index)
+                build(project)
+                case = json.loads((project / 'dataset.json').read_text(encoding='utf-8'))['cases'][0]
+                store = KnowledgeStore(project)
+                original = KnowledgeService.search
+                def changing_search(service, payload):
+                    value = original(service, payload)
+                    base = store.base(case['kb_ids'][0])
+                    store.set_archive(base['id'], {'archived': True, 'expected_revision': base['revision']})
+                    return value
+                with patch.object(KnowledgeService, 'search', changing_search), self.assertRaises(Conflict):
+                    builder(project, [case], backend='tfidf')
+
     def test_template_contains_retrieval_proposals_but_no_gold_or_model_calls(self):
         with tempfile.TemporaryDirectory() as root:
             project = Path(root) / "project"

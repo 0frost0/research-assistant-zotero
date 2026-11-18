@@ -151,6 +151,26 @@ test("desktop startup prepares dependencies then connects, with duplicate calls 
   assert.ok(results.every(result => result.connected));
 });
 
+test("remote GPU tunnel forwards Qwen, MinerU and reranker over the selected host", async () => {
+  const { bridge, Subprocess } = fixture();
+  bridge.setPref('engineExecutable', 'C:/Python/python.exe');
+  bridge.setPref('engineWorkdir', 'D:/assistant');
+  bridge.setPref('endpoint', 'http://127.0.0.1:8765');
+  bridge.setPref('qwenSshHost', 'siat-my-laptop');
+  bridge.resolveSshExecutable = async () => 'ssh.exe';
+  let tunnel;
+  Subprocess.call = async options => {
+    if (options.arguments[0] === '-N') tunnel = options;
+    return {exitCode: null, stdout: {readString: async () => 'ready'}, wait: async () => ({exitCode: 0})};
+  };
+  bridge.backendStatus = async () => ({connected: true});
+  await bridge.startAllServices();
+  assert.ok(tunnel.arguments.includes('127.0.0.1:30000:127.0.0.1:30000'));
+  assert.ok(tunnel.arguments.includes('127.0.0.1:30001:127.0.0.1:30001'));
+  assert.ok(tunnel.arguments.includes('127.0.0.1:30002:127.0.0.1:30002'));
+  assert.equal(tunnel.arguments.at(-1), 'siat-my-laptop');
+});
+
 test("cancelled desktop configuration is not reported as successful startup", async () => {
   const { bridge } = fixture();
   bridge.configureEngine = async () => false;
@@ -193,6 +213,31 @@ test("declining upload sends no requests", async () => {
   let calls = 0;
   bridge.request = async () => { calls++; };
   await bridge.sync(window);
+  assert.equal(calls, 0);
+});
+
+test('Zotero 10 sync uses plural getters without touching the removed getter', async () => {
+  const {bridge, Zotero, window} = fixture();
+  const collection = {name: 'Fixture', key: 'COL00001', libraryID: 1};
+  Zotero.getActiveZoteroPane = () => ({getSelectedCollections: () => [collection],
+    getCollectionTreeRows: () => [{}], getSelectedCollection: () => {throw new Error('removed');}});
+  Zotero.Libraries = {get: () => ({libraryType: 'user'})};
+  bridge.collect = async value => { assert.equal(value, collection); return {entities: [], documents: new Map()}; };
+  const calls = [];
+  bridge.request = async route => {calls.push(route); return {id: 'base', revision: 1};};
+  await bridge.sync(window);
+  assert.deepEqual(calls, ['bases', 'sync/base']);
+});
+
+test('Zotero 10 mixed or multiple collection selections never upload', async () => {
+  const {bridge, Zotero, window} = fixture();
+  let calls = 0;
+  bridge.request = async () => {calls++;};
+  bridge.collect = async () => {throw new Error('must not collect');};
+  for (const [collections, rows] of [[[], [{}]], [[{}, {}], [{}, {}]], [[{}], [{}, {}]]]) {
+    Zotero.getActiveZoteroPane = () => ({getSelectedCollections: () => collections, getCollectionTreeRows: () => rows});
+    await bridge.sync(window);
+  }
   assert.equal(calls, 0);
 });
 

@@ -1,0 +1,7 @@
+# Install only in project .setr_teacher_env, NOT production/shared environments.
+# Reuse existing torch 2.10.0+cu130 and accelerate 1.10.1 read-only from selector.
+# Student training remains in .selector_env with transformers 4.57.6/peft 0.17.1.
+# This teacher process does not import or run the inherited vLLM (<5 constraint).
+transformers==5.3.0
+huggingface-hub==1.6.0
+tokenizers==0.22.2
