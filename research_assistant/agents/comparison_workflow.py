@@ -83,9 +83,16 @@ ROLES = {
 
 async def call_model(role, payload):
     schema, instruction = ROLES[role]
-    model = build_chat_model()
-    model.max_tokens = 2600
-    response = await model.with_structured_output(schema, method="function_calling", include_raw=True).ainvoke([
+    from urllib.parse import urlparse
+    from research_assistant.core.service_context import llm_config
+    config = llm_config()
+    family = config["model"].rsplit("/", 1)[-1].lower()
+    model = build_chat_model(timeout=35, max_tokens=2600,
+                             reasoning_effort="low" if family.startswith("glm-5.3") else None)
+    method = "json_mode" if family.startswith("glm") or (urlparse(config.get("base_url", "")).hostname or "").lower() == "api.deepseek.com" else "function_calling"
+    if method == "json_mode":
+        instruction += "返回 JSON，符合此结构：" + json.dumps(schema.model_json_schema(), ensure_ascii=False)
+    response = await model.with_structured_output(schema, method=method, include_raw=True).ainvoke([
         SystemMessage(content=COMMON + instruction),
         HumanMessage(content=json.dumps(payload, ensure_ascii=False)),
     ])

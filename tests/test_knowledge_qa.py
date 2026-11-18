@@ -530,11 +530,15 @@ class EvidenceQATests(unittest.IsolatedAsyncioTestCase):
         from research_assistant.knowledge.qa import ModelCaller
         model = Mock()
         model.with_structured_output.return_value.ainvoke = AsyncMock(return_value={"parsed": {"claims": []}})
-        with patch.dict('os.environ', {'OPENAI_MODEL': 'GLM-5.3-FlashX', 'RESEARCH_QA_REVIEW_MODEL': 'GLM-5.3-FlashX'}):
-            with patch('research_assistant.agents.research_agent.build_chat_model', return_value=model) as build:
-                await ModelCaller()('review', {'claims': []}, 45)
-        self.assertFalse(build.call_args.kwargs['disable_thinking'])
-        self.assertEqual(build.call_args.kwargs['reasoning_effort'], 'low')
+        for model_id in ('GLM-5.3-FlashX', 'go/glm-5.3-flash'):
+            with self.subTest(model=model_id):
+                with patch.dict('os.environ', {'OPENAI_MODEL': model_id, 'RESEARCH_QA_REVIEW_MODEL': model_id}):
+                    with patch('research_assistant.agents.research_agent.build_chat_model', return_value=model) as build:
+                        await ModelCaller()('review', {'claims': []}, 45)
+                self.assertFalse(build.call_args.kwargs['disable_thinking'])
+                self.assertEqual(build.call_args.kwargs['reasoning_effort'], 'low')
+                self.assertEqual(build.call_args.kwargs['model_name'], model_id)
+                self.assertEqual(model.with_structured_output.call_args.kwargs['method'], 'json_mode')
 
     async def test_deepseek_uses_json_and_keeps_safe_parse_failure_diagnostics(self):
         from research_assistant.knowledge.qa import ModelCaller
