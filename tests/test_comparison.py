@@ -174,10 +174,14 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
         model = Mock()
         model.with_structured_output.return_value.ainvoke = AsyncMock(return_value={
             "parsed": {"findings": [], "gaps": []}, "raw": Mock(usage_metadata=None), "parsing_error": None})
-        with patch('research_assistant.agents.comparison_workflow.build_chat_model', return_value=model):
-            await call_model("analyst", {"question": "synthetic"})
-        self.assertEqual(model.max_tokens, 2600)
-        model.with_structured_output.return_value.ainvoke.assert_awaited_once()
+        for model_id, method in (("test-model", "function_calling"), ("go/glm-5.3-flash", "json_mode")):
+            with patch('research_assistant.core.service_context.llm_config', return_value={"model": model_id, "base_url": "http://localhost/v1"}), patch('research_assistant.agents.comparison_workflow.build_chat_model', return_value=model) as build:
+                await call_model("analyst", {"question": "synthetic"})
+            self.assertEqual(build.call_args.kwargs["max_tokens"], 2600)
+            self.assertEqual(build.call_args.kwargs["timeout"], 35)
+            self.assertEqual(model.with_structured_output.call_args.kwargs["method"], method)
+            if method == "json_mode":
+                self.assertEqual(build.call_args.kwargs["reasoning_effort"], "low")
 
 
 class RetrievalTests(unittest.TestCase):

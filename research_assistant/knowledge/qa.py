@@ -357,8 +357,11 @@ class ModelCaller:
         model_id = review_model() if role == "review" and not multimodal else llm_config()["model"]
         # GLM-5.3 is always-thinking (the provider rejects thinking=disabled).
         # Bound reasoning effort instead of carrying the GLM-4.7 switch over.
-        always_thinking = model_id.lower().startswith("glm-5.3")
-        nonthinking = role == "review" and model_id.lower().startswith("glm-4.7")
+        # Routing proxies may prefix a model with a provider/route namespace.
+        # Keep the full ID on the wire, but detect capabilities on its leaf.
+        model_family = model_id.rsplit("/", 1)[-1].lower()
+        always_thinking = model_family.startswith("glm-5.3")
+        nonthinking = role == "review" and model_family.startswith("glm-4.7")
         model = build_chat_model(timeout=timeout, max_tokens=1536 if nonthinking else 3072,
                                  model_name=model_id, disable_thinking=nonthinking,
                                  reasoning_effort="low" if always_thinking else None)
@@ -366,7 +369,7 @@ class ModelCaller:
         # tool arguments can be malformed even with finish_reason=tool_calls.
         from urllib.parse import urlparse
         deepseek = (urlparse(llm_config().get("base_url", "")).hostname or "").lower() == "api.deepseek.com"
-        method = "json_mode" if model_id.lower().startswith("glm") or deepseek else "function_calling"
+        method = "json_mode" if model_family.startswith("glm") or deepseek else "function_calling"
         if method == "json_mode":
             instruction += "返回 JSON，符合此结构：" + json.dumps(schema.model_json_schema(), ensure_ascii=False)
         public_payload = {k: v for k, v in payload.items() if k != "_visual_inputs"}

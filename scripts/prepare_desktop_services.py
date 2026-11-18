@@ -35,7 +35,13 @@ def main():
         deadline = time.monotonic() + 120
         while time.monotonic() < deadline:
             time.sleep(3)
-            if subprocess.run([docker, "version", "--format", "{{.Server.Version}}"], capture_output=True, timeout=10, creationflags=FLAGS).returncode == 0:
+            try:
+                available = subprocess.run([docker, "version", "--format", "{{.Server.Version}}"], capture_output=True, timeout=10, creationflags=FLAGS).returncode == 0
+            except subprocess.TimeoutExpired:
+                # Docker's pipe can exist before the engine answers. Keep the
+                # bounded startup deadline instead of aborting on that probe.
+                continue
+            if available:
                 ready = True
                 break
     if not ready:
