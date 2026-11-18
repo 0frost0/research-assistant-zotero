@@ -1,0 +1,15 @@
+{
+  "manifest_version": 2,
+  "name": "Research Assistant Bridge",
+  "version": "0.2.0",
+  "description": "Collection-scoped literature and reading-note knowledge bases.",
+  "author": "Research Assistant",
+  "applications": {
+    "zotero": {
+      "id": "research-assistant@local",
+      "update_url": "https://example.invalid/research-assistant/update.json",
+      "strict_min_version": "9.0",
+      "strict_max_version": "9.*"
+    }
+  }
+}
