@@ -34,3 +34,5 @@
 包内另留存4种不同字节的早期0.3.0插件（均为6个文件，尚无engine-settings资产），已随42包完整保留；不与 `v0.3.0` release 的后期8文件包混称同一构建。可用库存表中 `deployment/zotero/dist/*.xpi` 的哈希定位这些变体。
 
 0.3.11的同工作区双构建一致，但干净Git源码构建为另一哈希，说明原检查未覆盖换行转换。0.3.12修复后推荐使用该版；0.3.11及其42包／实验附件仍可下载，历史资产不覆盖。0.3.12同样指向完整源码提交。
+
+发布完成：15个新增prerelease；原research保留。前14版31资产实际下载核验通过；0.3.12干净源码构建、GitHub资产digest、更新清单及main/tag CI通过，后续再次下载遇到网络超时。详见 [历史资产收据](artifacts/releases-archive-verification.json) 与 [0.3.12收据](artifacts/release-0312-verification.json)。
