@@ -2,7 +2,7 @@
 
 ## 当前交付（2026-11-18）
 
-Zotero 9/10 插件 + Python 后端：BM25／Qwen 混合检索、原文引文核验、有界补检索，以及带 revision 的个人文献记忆。当前源码版本 **0.3.11**；生产检索策略仍为 `hybrid_rerank`。本轮发布归档不自动更新正在运行的后端或正式 Zotero profile。
+Zotero 9/10 插件 + Python 后端：BM25／Qwen 混合检索、原文引文核验、有界补检索，以及带 revision 的个人文献记忆。当前源码版本 **0.3.12**；生产检索策略仍为 `hybrid_rerank`。本轮发布归档不自动更新正在运行的后端或正式 Zotero profile。
 
 - [五分钟演示与复现](docs/演示与面试主线.md) · [简历项目经历与事实依据](docs/简历项目经历.md)
 - [版本归档及更新记录](docs/releases/README.md) · [GitHub Releases](https://github.com/0frost0/research-assistant-zotero/releases)
@@ -137,7 +137,7 @@ Zotero 插件 + Python 检索后端。在自己的文献库上做**带出处的�
 - MinerU 表格单元格存储、分页关键词检索及受限只读 SQL
 - 研究项目工作台：项目记忆、任务进度、LangGraph 持久化规划、规则检查与人工审批
 
-阅读模块验收：本轮同步阅读浏览器 13 项通过，3 项选区几何检查通过，独立引擎模拟 11 项通过；Python 全套最新计数见 [验证记录](benchmarks/reading/verified_results.json)。全部新验收使用隔离数据，未向正式库写入测试笔记。本轮真实模型测试未执行完成，不用模拟结果代替质量或费用数据。
+阅读模块历史验收：同步阅读浏览器 13 项通过，3 项选区几何检查通过，独立引擎模拟 11 项通过；当前 Python 回归计数见 [本轮验收记录](docs/acceptance/2026-11-18-交付收尾.md)。上述阅读验收使用隔离数据，未向正式库写入测试笔记；当时真实模型测试未完成，不用模拟结果代替质量或费用数据。
 
 ## 多文献对照
 

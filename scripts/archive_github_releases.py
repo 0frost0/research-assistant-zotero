@@ -19,6 +19,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 REPO = "0frost0/research-assistant-zotero"
 API = "https://api.github.com"
+FULL_SOURCE_VERSIONS = {"0.3.11", "0.3.12"}
 NOTES = {
     "0.1.0": "初版桥接：manifest、bootstrap 与 bridge；仅归档实际留存插件。",
     "0.2.0": "分类知识库工作台、文献与笔记同步。保留已发布 research release 的原始包；local-retained 为同版本不同字节的本地留存变体。",
@@ -34,6 +35,7 @@ NOTES = {
     "0.3.9": "实验图文问答：显式图片支持配置、受控图片展示、视觉观察标签及草稿来源隔离。",
     "0.3.10": "实验生成前充分性检查开关与轨迹；明确图片重复发送计费。质量未达生产门禁要求。",
     "0.3.11": "产品收尾：后端复核与笔记范围严格布尔校验、严格 claim index；补公开实验收据 CI、演示、简历事实清单与历史版本归档。插件业务资产相对 0.3.10 不变。",
+    "0.3.12": "构建修复：所有插件文本资产统一LF换行，消除Git autocrlf导致的跨平台XPI哈希差异；新增LF／CRLF回归，并从干净提交源码重建核验。",
 }
 
 
@@ -86,7 +88,7 @@ def prepare(output):
         for n, b in assets.items():
             (source / n).write_bytes(b)
         boundary = ("当前完整源码提交；本轮未重新运行真实模型／原生 Zotero 验收。"
-                    if version == "0.3.11" else
+                    if version in FULL_SOURCE_VERSIONS else
                     "2026-11-18 补录的历史归档，不是当时已发布的声明。标签源码由此 XPI 精确还原，仅包含插件；不包含或冒充该时点的完整后端快照。历史包不建议用于当前生产。")
         body = f"# v{version}\n\n{description}\n\n{boundary}\n\n插件需要独立 Python 后端、模型和用户配置；XPI 不携带这些服务。\n\n相较上一归档包变化的文件：{', '.join(changed)}。\n\nSHA-256 `{sha(raw)}`\n\n更新依据：留存包逐文件比对、项目问题排查笔记及验收文档；不追溯伪造发布日期。\n"
         (folder / "release-notes.md").write_text(body, encoding="utf-8")
@@ -98,7 +100,7 @@ def prepare(output):
             checksums[alt] = sha(local_variant)
         (folder / "SHA256SUMS.txt").write_text("".join(f"{value}  {key}\n" for key, value in checksums.items()), encoding="utf-8")
         records.append({"version": version, "description": description, "assets": checksums,
-                        "changed_plugin_files": changed, "historical_backend_available": version == "0.3.11"})
+                        "changed_plugin_files": changed, "historical_backend_available": version in FULL_SOURCE_VERSIONS})
         previous = assets
     (output / "manifest.json").write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps({"versions": len(records), "output": str(output)}))
@@ -111,8 +113,10 @@ def archive_tag(folder, version):
         commit = git("rev-parse", tag + "^{commit}").decode().strip()
         validate_tag(folder, version, commit)
         return commit
-    if version == "0.3.11":
+    if version in FULL_SOURCE_VERSIONS:
         commit = git("rev-parse", "HEAD").decode().strip()
+        if json.loads(git("show", commit + ":deployment/zotero/manifest.json"))["version"] != version:
+            raise ValueError("Commit version differs from requested full-source release")
     else:
         # Build an isolated Git index without changing the checkout or its index.
         import os
@@ -135,9 +139,7 @@ def archive_tag(folder, version):
 
 def validate_tag(folder, version, commit):
     source = folder / "source"
-    if version == "0.3.11":
-        if commit != git("rev-parse", "HEAD").decode().strip():
-            raise ValueError("Current version tag does not point to HEAD")
+    if version in FULL_SOURCE_VERSIONS:
         paths = (source / "deployment" / "zotero").iterdir()
     else:
         paths = (p for p in source.rglob("*") if p.is_file())
@@ -149,7 +151,7 @@ def validate_tag(folder, version, commit):
         # Main source may use platform-native line endings; historical blobs are exact.
         actual = git("show", commit + ":" + p.relative_to(source).as_posix())
         expected = p.read_bytes()
-        if version == "0.3.11":
+        if version in FULL_SOURCE_VERSIONS:
             actual, expected = actual.replace(b"\r\n", b"\n"), expected.replace(b"\r\n", b"\n")
         if actual != expected:
             raise ValueError("Tag source does not match prepared plugin: " + p.name)
@@ -184,7 +186,7 @@ def publish(output):
             if exc.code != 404:
                 raise
             release = json.loads(request(endpoint, token, {
-                "tag_name": "v" + version, "name": f"v{version} — {'收尾候选' if version == '0.3.11' else '历史产物归档'}",
+                "tag_name": "v" + version, "name": f"v{version} — {'收尾候选' if version in FULL_SOURCE_VERSIONS else '历史产物归档'}",
                 "body": (folder / "release-notes.md").read_text(encoding="utf-8"),
                 "draft": True, "prerelease": True, "make_latest": "false"}))
         existing = {a["name"]: a for a in release["assets"]}

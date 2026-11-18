@@ -25,7 +25,12 @@
 | 0.3.9 | 实验图文问答、受控图片和视觉来源标签 |
 | 0.3.10 | 实验充分性开关、检查轨迹与图片计费说明 |
 | 0.3.11 | 后端严格决策类型、实验收据 CI、演示／简历与历史归档；插件逻辑未变 |
+| 0.3.12 | 文本资产LF归一化，修复Git autocrlf导致的跨平台构建差异；保留0.3.11原始资产 |
 
 这些说明由真实包逐文件比对及历史故障笔记整理；同期后端改动不冒充 XPI 内的内容。实验负结果保留在 [公开资源调研](../充分性公开资源调研.md)、[QASPER](../QASPER微调记录.md)、[SetR](../SetR重跑记录.md)、[IC6](../IC6提升调研.md)、[RINSE](../RINSE第三阶段.md)。公开附件为汇总和指纹，私人原文、数据库、凭据与未授权模型权重不发布。
 
 42份历史包的更新依据：`qa-release*` 为有据问答阶段；`comparison-release` 为条件对照阶段；`memory-release*` 为个人记忆与组合回答阶段，其中 `memory-gate`、`source-anchor`、`ci-memory` 分别对应门控、来源锚点和CI迭代；`research-assistant-memory*` 为记忆可靠性迭代；`research-assistant-release-qa-history*`、`ci-guard*`、`qa-eval-guard*`、`manual-retry*` 为历史回看、CI门禁、评测校验和手动重试阶段。同系列序号／final变体的精确更新以 `artifacts/retained-bundles.json` 逐文件哈希及包内代码／故障笔记为准，不推测每个后缀对应的功能或日期。
+
+包内另留存4种不同字节的早期0.3.0插件（均为6个文件，尚无engine-settings资产），已随42包完整保留；不与 `v0.3.0` release 的后期8文件包混称同一构建。可用库存表中 `deployment/zotero/dist/*.xpi` 的哈希定位这些变体。
+
+0.3.11的同工作区双构建一致，但干净Git源码构建为另一哈希，说明原检查未覆盖换行转换。0.3.12修复后推荐使用该版；0.3.11及其42包／实验附件仍可下载，历史资产不覆盖。0.3.12同样指向完整源码提交。

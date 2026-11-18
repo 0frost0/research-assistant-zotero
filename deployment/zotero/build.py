@@ -41,7 +41,9 @@ def build(output_dir=None):
             info.create_system = 3
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o644 << 16
-            archive.writestr(info, (ROOT / name).read_bytes())
+            # All shipped assets are UTF-8 text. Git autocrlf must not change
+            # release bytes between a Windows checkout and a Linux checkout.
+            archive.writestr(info, (ROOT / name).read_bytes().replace(b"\r\n", b"\n"))
     return output, hashlib.sha256(output.read_bytes()).hexdigest()
 
 
