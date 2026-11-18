@@ -28,6 +28,16 @@ class MinerUExtractionError(RuntimeError):
     """MinerU 未配置、远程服务不可用或输出不完整。"""
 
 
+def _filesystem_path(path: Path) -> Path:
+    """Use Win32 extended paths for deep content-addressed cache trees."""
+    absolute = str(path.absolute())
+    if os.name != "nt" or absolute.startswith("\\\\?\\"):
+        return Path(absolute)
+    if absolute.startswith("\\\\"):
+        return Path("\\\\?\\UNC\\" + absolute[2:])
+    return Path("\\\\?\\" + absolute)
+
+
 def _default_python() -> Path:
     configured = os.getenv("RESEARCH_ASSISTANT_MINERU_PYTHON")
     if configured:
@@ -76,7 +86,7 @@ class MinerUExtractor:
         timeout_seconds: int | None = None,
         mode: str = "remote",
     ) -> None:
-        self.cache_dir = (cache_dir or DEFAULT_CACHE_DIR).resolve()
+        self.cache_dir = _filesystem_path((cache_dir or DEFAULT_CACHE_DIR).resolve())
         if mode not in {"local", "remote"}:
             raise ValueError("Unknown MinerU mode")
         self.mode = mode
@@ -196,6 +206,7 @@ class MinerUExtractor:
                 candidate = Path(str(image_path))
                 if not candidate.is_absolute():
                     candidate = content_list_path.parent / candidate
+                candidate = _filesystem_path(candidate)
                 image_path = str(candidate.resolve())
                 if not candidate.resolve().is_relative_to(cache_path.resolve()) or not candidate.is_file():
                     raise MinerUExtractionError("MinerU 图片路径不在缓存中或文件缺失")
