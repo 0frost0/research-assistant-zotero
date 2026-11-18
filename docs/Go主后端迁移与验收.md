@@ -17,8 +17,9 @@
   go vet ./...
   go build -o ../output/zotero/researchd.exe ./cmd/researchd
   cd ..
+  python benchmarks/prepare_real_zotero_run.py --target output/zotero/real-questions-go-new --connection <connection-id> --base <kb-id>
   powershell -File benchmarks/run_real_zotero_questions.ps1 `
-    -Target output/zotero/real-questions-go-aligned-20261118 -GoBackend
+    -Target output/zotero/real-questions-go-new -GoBackend
   ```
 
 ## 明确边界
@@ -28,3 +29,9 @@
 - 多文献对照已完成 Go 编排与合成测试，保留按篇取证、并行分析、跨来源约束和一次复核；尚未完成真实 Zotero 对照验收。
 - 生产仍使用 `hybrid_rerank`，本轮没有生产部署授权。检索完整职责、网页全部接口以及真实解析/上传/对照仍是后续迁移工作。
 - 引用审计只证明逐字摘录和页面/revision 对得上，不证明语义正确率、充分性准确率或泛化效果。
+
+## 发布与 CI 故障记录
+
+- 提交 `6929f3b` 首次推送两次发生 GitHub 443 TCP 超时；后续 DNS、TLS 和 `ls-remote` 恢复，正常推送成功，远端 SHA 已核对。
+- 首轮远端 CI 的 Python、Node、XPI job 成功，Go job 在测试阶段失败。Go job 缺少 Python 环境与存储契约所需的 `pypdf`；现补显式 Python 3.12、pypdf 与 `PYTHON_EXECUTABLE`，Go 缓存路径改为 `backend/go.sum`。修复后的远端结果另行核验。
+- `v0.4.0-go-core` 是核心迁移 prerelease。初始 Windows 包由未提交工作树构建，内嵌 `vcs.revision=a4c0c3f`、`vcs.modified=true`，不能以文件名声称它是干净 `6929f3b` 构建；后续提供独立标注的干净提交构建，保留初始资产字节供审计。
