@@ -1,0 +1,25 @@
+{
+  "version": "0.3.12",
+  "url": "https://github.com/0frost0/research-assistant-zotero/releases/tag/v0.3.12",
+  "commit": "80b7d4532fdde22385c2e5666c59d9662275f6ec",
+  "prerelease": true,
+  "assets": [
+    {
+      "name": "research-assistant-0.3.12.xpi",
+      "sha256": "f1e0f1c3fac4be230924a3a66ff53b172f12b97cbc54abce59950a327f6b9196",
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.12/research-assistant-0.3.12.xpi"
+    },
+    {
+      "name": "SHA256SUMS.txt",
+      "sha256": "1f8d324c7781d2be78e56cff1f58465154ef59893bbbce284d7caf7f37c96b9f",
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.12/SHA256SUMS.txt"
+    }
+  ],
+  "verification": "GitHub API digest equals local bytes; clean git archive rebuild matches XPI; later browser download retries timed out",
+  "updates_json_verified": true,
+  "ci": [
+    "https://github.com/0frost0/research-assistant-zotero/actions/runs/44311710858",
+    "https://github.com/0frost0/research-assistant-zotero/actions/runs/44311682646"
+  ],
+  "ci_conclusion": "success"
+}

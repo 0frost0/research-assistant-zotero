@@ -1,0 +1,292 @@
+{
+  "versions": [
+    {
+      "version": "0.1.0",
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/tag/v0.1.0",
+      "commit": "b5787b0fb9f0c26f800c6a24553796e9ed57e223",
+      "assets": {
+        "research-assistant-0.1.0.xpi": "ded3140e6cb30146a972fa356d4e53c7408d2d3fd0078be6e2484a5a923abdaa",
+        "SHA256SUMS.txt": "c6f57964b648209265aaa6c4a0279ae092b684727ae32039b97acc2f4b6978af"
+      }
+    },
+    {
+      "version": "0.2.0",
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/tag/v0.2.0",
+      "commit": "22ef23e1a63e164025a09bac640f8c978c981db2",
+      "assets": {
+        "research-assistant-0.2.0.xpi": "f09a319846fa0abe3b1668f46e7bbde714bc00781be46dabbfd94854b052866e",
+        "research-assistant-0.2.0-local-retained.xpi": "908cdc9d621afd72eb5c29154912f2eeb5b89ea0facf66681154872d8ae2c084",
+        "SHA256SUMS.txt": "d940eaeefe86bfb461168b1f9b94b4b77c6551f05b61d933753080726c467fb1"
+      }
+    },
+    {
+      "version": "0.3.0",
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/tag/v0.3.0",
+      "commit": "f6b548c7ba405c77142f5cab2129767b1ba88e96",
+      "assets": {
+        "research-assistant-0.3.0.xpi": "9cb2a1d77658a661a908e607a60b6bfbaabd6a69f6bd5859a896b1ee413ef0ef",
+        "SHA256SUMS.txt": "ac5863a45d84535e22db097dce14031b8f857e11e27044c6768a686307039042"
+      }
+    },
+    {
+      "version": "0.3.1",
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/tag/v0.3.1",
+      "commit": "c158ab12ab6bca0f44d4e357d06bf161b45c5507",
+      "assets": {
+        "research-assistant-0.3.1.xpi": "b9a88b13464dc314487507fd2551d49259ed85fc436ef1bdca11d2230e891768",
+        "SHA256SUMS.txt": "001aacd22cb2f4ddfa5cd73448441eb0cebfc65cb500935fc66999f7fce93fe1"
+      }
+    },
+    {
+      "version": "0.3.2",
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/tag/v0.3.2",
+      "commit": "a12ce45983613b948eed6f8a209decf3beb29148",
+      "assets": {
+        "research-assistant-0.3.2.xpi": "529b2a536eb26b2c80144ea78d39068ef1a8e130a84bc54b7cb107c4943fd790",
+        "SHA256SUMS.txt": "a52e6a69aa15d4333780457a4d88860d67e4177cd0e013d6cb1736a5c1357048"
+      }
+    },
+    {
+      "version": "0.3.3",
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/tag/v0.3.3",
+      "commit": "37d870d8fd7304bcfbb547389f5de5659652f1ff",
+      "assets": {
+        "research-assistant-0.3.3.xpi": "9546ead16c69cf29a4441158190fabd83d0ddd5808119592ee98aba324fe4f69",
+        "SHA256SUMS.txt": "c118733a83b9c08c97f69622b615bc1b8b45a7b554288808319c4f9d9bf62f5a"
+      }
+    },
+    {
+      "version": "0.3.4",
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/tag/v0.3.4",
+      "commit": "c66447f8514cdd437b12e826c535d23ce6f6bfcf",
+      "assets": {
+        "research-assistant-0.3.4.xpi": "d9fb44aec9ca4db4d44f47a62b84eeb9ef2d9f557dd09fc538e341e5d061318a",
+        "SHA256SUMS.txt": "11a6a938d825038a9cbdd3f5aa9ff270740d952fe76852ad712cf362dc1a903f"
+      }
+    },
+    {
+      "version": "0.3.5",
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/tag/v0.3.5",
+      "commit": "9991602e63beebf1083191cef4489cd33926f127",
+      "assets": {
+        "research-assistant-0.3.5.xpi": "97704fa39b8ceeb1ed06734e7c1eb38848b75bc7eb38f37cb84c53bedef3de9e",
+        "SHA256SUMS.txt": "597a50bdd2a8eb102ac027bdb1f0f6c4249d0a5ac2aca1da41ce632e4249de71"
+      }
+    },
+    {
+      "version": "0.3.6",
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/tag/v0.3.6",
+      "commit": "24a55dd12f051d24ebf0a7b299ae71d1054de721",
+      "assets": {
+        "research-assistant-0.3.6.xpi": "1e26ac954d81a48aae410f1b6ead5d5a597d504a2c8597ac2d68b829fa7acbcb",
+        "SHA256SUMS.txt": "0eeb4f3fb42794cfbfbef316d3cb38f550b64c07fe051ec6adf707800fd5176b"
+      }
+    },
+    {
+      "version": "0.3.7",
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/tag/v0.3.7",
+      "commit": "9c421a65627ab9c42b67bf7fc5f8ced6f4b59c6f",
+      "assets": {
+        "research-assistant-0.3.7.xpi": "dc6d6a9465b16bb93e54c9befac19e7853e7b6b11462cb700bd206bcb35b6fec",
+        "SHA256SUMS.txt": "b62802c5e9dde500b533ca0365d919d44fd9c6678310d70dad792c2da944a219"
+      }
+    },
+    {
+      "version": "0.3.8",
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/tag/v0.3.8",
+      "commit": "8d6e19ee047c6e9283ea45058dce03a184a28ded",
+      "assets": {
+        "research-assistant-0.3.8.xpi": "6dc7df249723e459e0977c2618c779079c17d00f40ed2b44f0714387dda2795d",
+        "SHA256SUMS.txt": "3301b013de45888464829444e38d074005ead9d2f4a50516949cac2ac450212d"
+      }
+    },
+    {
+      "version": "0.3.9",
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/tag/v0.3.9",
+      "commit": "15314919b8e79462de8eebe72d8c92574557e66c",
+      "assets": {
+        "research-assistant-0.3.9.xpi": "a3efafbe4f6d7abe08b96d172b42782fd9dacfce71bb8a148150d31663139965",
+        "SHA256SUMS.txt": "4d4d6b97db4fc502403ad653bdddbf5fbebd73882a1c9691bbd86e253b1cf708"
+      }
+    },
+    {
+      "version": "0.3.10",
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/tag/v0.3.10",
+      "commit": "58bf9c792969d479976c2b9230ce474df4a13dc5",
+      "assets": {
+        "research-assistant-0.3.10.xpi": "c3405a89283d1927ed84becc55f2947b323bd0c3315f885f4b42b197ed7d5853",
+        "SHA256SUMS.txt": "ea56a02f458e01ba7d61b4511751f8c9658108274faebaca234cd0647daf4013"
+      }
+    },
+    {
+      "version": "0.3.11",
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/tag/v0.3.11",
+      "commit": "21ed139f164e2d7cd98bb3eef78a97da23f8d25b",
+      "assets": {
+        "research-assistant-0.3.11.xpi": "faa17d0186cdf9ff4ede9d5659e2e6a009572cd151271ecf0be3b186081252b6",
+        "retained-development-bundles.zip": "26e44332a0f0d67168b8913942745427d2445fabd945740f8c92a0e193b99129",
+        "public-experiment-reports.zip": "ef6cab0bf91023f17195b871d1f35851e9660dbfef30d26d6dcccdfae00d39d5",
+        "SHA256SUMS.txt": "3431f6f461c35b238a9aae8094bb60faf02fcf106e1a9865c723e8654f1e7aac"
+      }
+    }
+  ],
+  "downloaded_assets": [
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.1.0/research-assistant-0.1.0.xpi",
+      "bytes": 5266,
+      "sha256": "ded3140e6cb30146a972fa356d4e53c7408d2d3fd0078be6e2484a5a923abdaa"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.1.0/SHA256SUMS.txt",
+      "bytes": 96,
+      "sha256": "c6f57964b648209265aaa6c4a0279ae092b684727ae32039b97acc2f4b6978af"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.2.0/research-assistant-0.2.0.xpi",
+      "bytes": 13893,
+      "sha256": "f09a319846fa0abe3b1668f46e7bbde714bc00781be46dabbfd94854b052866e"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.2.0/research-assistant-0.2.0-local-retained.xpi",
+      "bytes": 15353,
+      "sha256": "908cdc9d621afd72eb5c29154912f2eeb5b89ea0facf66681154872d8ae2c084"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.2.0/SHA256SUMS.txt",
+      "bytes": 207,
+      "sha256": "d940eaeefe86bfb461168b1f9b94b4b77c6551f05b61d933753080726c467fb1"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.0/research-assistant-0.3.0.xpi",
+      "bytes": 29457,
+      "sha256": "9cb2a1d77658a661a908e607a60b6bfbaabd6a69f6bd5859a896b1ee413ef0ef"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.0/SHA256SUMS.txt",
+      "bytes": 96,
+      "sha256": "ac5863a45d84535e22db097dce14031b8f857e11e27044c6768a686307039042"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.1/research-assistant-0.3.1.xpi",
+      "bytes": 29457,
+      "sha256": "b9a88b13464dc314487507fd2551d49259ed85fc436ef1bdca11d2230e891768"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.1/SHA256SUMS.txt",
+      "bytes": 96,
+      "sha256": "001aacd22cb2f4ddfa5cd73448441eb0cebfc65cb500935fc66999f7fce93fe1"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.2/research-assistant-0.3.2.xpi",
+      "bytes": 29469,
+      "sha256": "529b2a536eb26b2c80144ea78d39068ef1a8e130a84bc54b7cb107c4943fd790"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.2/SHA256SUMS.txt",
+      "bytes": 96,
+      "sha256": "a52e6a69aa15d4333780457a4d88860d67e4177cd0e013d6cb1736a5c1357048"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.3/research-assistant-0.3.3.xpi",
+      "bytes": 29854,
+      "sha256": "9546ead16c69cf29a4441158190fabd83d0ddd5808119592ee98aba324fe4f69"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.3/SHA256SUMS.txt",
+      "bytes": 96,
+      "sha256": "c118733a83b9c08c97f69622b615bc1b8b45a7b554288808319c4f9d9bf62f5a"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.4/research-assistant-0.3.4.xpi",
+      "bytes": 29987,
+      "sha256": "d9fb44aec9ca4db4d44f47a62b84eeb9ef2d9f557dd09fc538e341e5d061318a"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.4/SHA256SUMS.txt",
+      "bytes": 96,
+      "sha256": "11a6a938d825038a9cbdd3f5aa9ff270740d952fe76852ad712cf362dc1a903f"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.5/research-assistant-0.3.5.xpi",
+      "bytes": 30061,
+      "sha256": "97704fa39b8ceeb1ed06734e7c1eb38848b75bc7eb38f37cb84c53bedef3de9e"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.5/SHA256SUMS.txt",
+      "bytes": 96,
+      "sha256": "597a50bdd2a8eb102ac027bdb1f0f6c4249d0a5ac2aca1da41ce632e4249de71"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.6/research-assistant-0.3.6.xpi",
+      "bytes": 30168,
+      "sha256": "1e26ac954d81a48aae410f1b6ead5d5a597d504a2c8597ac2d68b829fa7acbcb"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.6/SHA256SUMS.txt",
+      "bytes": 96,
+      "sha256": "0eeb4f3fb42794cfbfbef316d3cb38f550b64c07fe051ec6adf707800fd5176b"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.7/research-assistant-0.3.7.xpi",
+      "bytes": 30609,
+      "sha256": "dc6d6a9465b16bb93e54c9befac19e7853e7b6b11462cb700bd206bcb35b6fec"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.7/SHA256SUMS.txt",
+      "bytes": 96,
+      "sha256": "b62802c5e9dde500b533ca0365d919d44fd9c6678310d70dad792c2da944a219"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.8/research-assistant-0.3.8.xpi",
+      "bytes": 30712,
+      "sha256": "6dc7df249723e459e0977c2618c779079c17d00f40ed2b44f0714387dda2795d"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.8/SHA256SUMS.txt",
+      "bytes": 96,
+      "sha256": "3301b013de45888464829444e38d074005ead9d2f4a50516949cac2ac450212d"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.9/research-assistant-0.3.9.xpi",
+      "bytes": 31637,
+      "sha256": "a3efafbe4f6d7abe08b96d172b42782fd9dacfce71bb8a148150d31663139965"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.9/SHA256SUMS.txt",
+      "bytes": 96,
+      "sha256": "4d4d6b97db4fc502403ad653bdddbf5fbebd73882a1c9691bbd86e253b1cf708"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.10/research-assistant-0.3.10.xpi",
+      "bytes": 31890,
+      "sha256": "c3405a89283d1927ed84becc55f2947b323bd0c3315f885f4b42b197ed7d5853"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.10/SHA256SUMS.txt",
+      "bytes": 97,
+      "sha256": "ea56a02f458e01ba7d61b4511751f8c9658108274faebaca234cd0647daf4013"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.11/research-assistant-0.3.11.xpi",
+      "bytes": 31891,
+      "sha256": "faa17d0186cdf9ff4ede9d5659e2e6a009572cd151271ecf0be3b186081252b6"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.11/retained-development-bundles.zip",
+      "bytes": 47235594,
+      "sha256": "26e44332a0f0d67168b8913942745427d2445fabd945740f8c92a0e193b99129"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.11/public-experiment-reports.zip",
+      "bytes": 649328,
+      "sha256": "ef6cab0bf91023f17195b871d1f35851e9660dbfef30d26d6dcccdfae00d39d5"
+    },
+    {
+      "url": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.11/SHA256SUMS.txt",
+      "bytes": 294,
+      "sha256": "3431f6f461c35b238a9aae8094bb60faf02fcf106e1a9865c723e8654f1e7aac"
+    }
+  ],
+  "update_links": 13,
+  "original_research_asset_unchanged": true
+}
