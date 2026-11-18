@@ -30,8 +30,22 @@ class ZoteroBuildTests(unittest.TestCase):
             with zipfile.ZipFile(artifacts[0][0]) as archive:
                 self.assertEqual(archive.namelist(), list(builder.ASSETS))
                 for name in builder.ASSETS:
-                    self.assertEqual(archive.read(name), (builder.ROOT / name).read_bytes())
+                    self.assertEqual(archive.read(name), (builder.ROOT / name).read_bytes().replace(b"\r\n", b"\n"))
                     self.assertEqual(archive.getinfo(name).create_system, 3)
+
+    def test_git_checkout_line_endings_do_not_change_release_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            hashes = []
+            for label, newline in (("lf", b"\n"), ("crlf", b"\r\n")):
+                source = root / label
+                source.mkdir()
+                for name in builder.ASSETS:
+                    raw = (builder.ROOT / name).read_bytes().replace(b"\r\n", b"\n")
+                    (source / name).write_bytes(raw.replace(b"\n", newline))
+                with patch.object(builder, "ROOT", source):
+                    hashes.append(builder.build(root / (label + "-output"))[1])
+            self.assertEqual(hashes[0], hashes[1])
 
 
 if __name__ == "__main__":
