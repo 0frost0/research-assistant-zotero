@@ -8,6 +8,7 @@ param(
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path "$PSScriptRoot\..").Path
 $targetPath = (Resolve-Path (Join-Path $root $Target)).Path
+if (Test-Path (Join-Path $targetPath "result.json")) { throw "Refusing completed or partial run directory; prepare a new target" }
 $server = $null
 $zotero = $null
 $worker = $null
