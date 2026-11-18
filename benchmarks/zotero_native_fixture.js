@@ -1,10 +1,20 @@
 async function runNativeFixture() {
   const root = __FIXTURE_ROOT__;
+  const qaQuestion = "Does retrieval need careful validation?";
   const path = name => PathUtils.join(root, name);
   const write = async value => Zotero.File.putContentsAsync(path("result.json"), JSON.stringify(value));
+  const searchReady = async payload => {
+    for (let attempt = 0; attempt < 240; attempt++) {
+      const value = await ResearchBridge.request("search", payload);
+      if (value.status !== "indexing") return value;
+      await Zotero.Promise.delay(500);
+    }
+    throw new Error("Fixture index did not become ready");
+  };
   const window = Zotero.getMainWindow();
   const original = { alert: window.alert, confirm: window.confirm, pane: Zotero.getActiveZoteroPane };
-  const result = { phase: "startup", menu: !!window.document.getElementById("research-assistant-menu") };
+  const result = { phase: "startup", zotero_version: Zotero.version,
+    menu: !!window.document.getElementById("research-assistant-menu") };
   let workbench;
   try {
     await write(result);
@@ -58,8 +68,14 @@ async function runNativeFixture() {
     result.phase = "created"; await write(result);
     window.alert = () => {};
     window.confirm = () => true;
-    Zotero.getActiveZoteroPane = () => ({ getSelectedCollection: () => collection });
-    ResearchBridge.setPref("endpoint", "http://127.0.0.1:8771");
+    const pane = Zotero.getActiveZoteroPane();
+    await pane.collectionsView.selectByID("C" + collection.id);
+    const selectedCollections = typeof pane.getSelectedCollections === "function"
+      ? pane.getSelectedCollections() : [pane.getSelectedCollection()];
+    result.native_collection_selection = selectedCollections.length === 1 && selectedCollections[0].id === collection.id;
+    if (!result.native_collection_selection) throw new Error("Native collection selection failed");
+    ResearchBridge.setPref("connection", "fixture");
+    ResearchBridge.setPref("endpoint", "http://127.0.0.1:__FIXTURE_PORT__");
     ResearchBridge.setPref("token", "synthetic-acceptance-token");
     await ResearchBridge.sync(window);
     workbench = ResearchBridge.workbench;
@@ -104,10 +120,16 @@ async function runNativeFixture() {
     }
     // Check the native Zotero note before creating any local assistant note.
     // It must stay in the personal-memory lane and retain a Zotero item URL.
-    const externalSearch = await ResearchBridge.request("search", {
-      kb_ids: [result.base_id], scope: "notes", k: 5,
-      query: "Synthetic scientific evidence note"
-    });
+    let externalSearch;
+    for (let attempt = 0; attempt < 240; attempt++) {
+      externalSearch = await ResearchBridge.request("search", {
+        kb_ids: [result.base_id], scope: "notes", k: 5,
+        query: "Synthetic scientific evidence note"
+      });
+      if (externalSearch.status !== "indexing") break;
+      await Zotero.Promise.delay(500);
+    }
+    if (externalSearch.status === "indexing") throw new Error("External note index did not become ready");
     const externalHit = externalSearch.results?.find(hit => hit.kind === "external_note");
     result.external_note_hits = externalSearch.results?.filter(hit => hit.kind === "external_note").length || 0;
     result.external_note_url = externalHit?.url || "";
@@ -115,7 +137,7 @@ async function runNativeFixture() {
     // exercises both source lanes in the isolated fixture.
     await ResearchBridge.request("notes", {
       kb_id: result.base_id, type: "understanding", title: "Synthetic understanding",
-      body: "我记录：这项方法需要回到原文核对。scientific evidence", confirmed: true,
+      body: "我记录：检索需要谨慎核验。Retrieval needs careful validation. scientific evidence", confirmed: true,
       anchors: [{source: snapshot.entities.find(e => e.kind === "document")?.data?.hash + ".pdf",
                  page: 1, quote: "Scientific evidence from original paper.", kind: "original",
                  url: `zotero://open-pdf/library/items/${snapshot.entities.find(e => e.kind === "document")?.data?.key}?page=1`}]
@@ -129,14 +151,15 @@ async function runNativeFixture() {
     if (!result.memory_hint_after_create.includes("2 条可检索个人记录")) {
       throw new Error("Local note count did not refresh alongside the native note");
     }
-    doc.getElementById("query").value = "scientific evidence";
+    doc.getElementById("query").value = qaQuestion;
     doc.getElementById("askButton").click();
-    for (let attempt = 0; attempt < 300; attempt++) {
+    for (let attempt = 0; attempt < __QA_WAIT_ATTEMPTS__; attempt++) {
       if (doc.querySelector(".answer-claim") && !doc.getElementById("askButton").disabled) break;
       await Zotero.Promise.delay(100);
     }
     result.qa_claims = doc.querySelectorAll(".answer-claim").length;
-    result.qa_quote = Boolean(doc.querySelector(".answer-claim blockquote")?.textContent.includes("Scientific evidence"));
+    result.qa_quote = [...doc.querySelectorAll(".answer-claim blockquote")]
+      .some(node => node.textContent.toLowerCase().includes("validation"));
     result.qa_sections = [...doc.querySelectorAll(".answer-section-title")].map(n => n.textContent);
     result.qa_usage = doc.getElementById("resultMeta").textContent;
     // The async job is durable; the plugin must expose it without resubmitting
@@ -189,6 +212,8 @@ async function runNativeFixture() {
     result.ai_draft_saved = Boolean(draft && !draft.data.confirmed &&
       draft.data.source_status === "linked" && result.ai_draft_anchors > 0);
     if (draft) {
+      const draftSearch = await searchReady({kb_ids: [result.base_id], scope: "notes", query: draft.data.body, k: 20});
+      result.ai_draft_excluded_before_confirmation = !draftSearch.results.some(hit => hit.entity_id === draft.id);
       const confirmedDraft = await ResearchBridge.request("notes/" + draft.id, {
         kb_id: result.base_id, title: draft.data.title, body: "用户核对后的合成结论",
         type: draft.data.type, confirmed: true, anchors: draft.data.anchors,
@@ -197,6 +222,115 @@ async function runNativeFixture() {
       result.ai_draft_confirmed = confirmedDraft.author_source === "ai" &&
         confirmedDraft.confirmed && confirmedDraft.revision === draft.revision + 1 &&
         confirmedDraft.source_status === "linked" && confirmedDraft.anchors?.length === result.ai_draft_anchors;
+    }
+    // Versioned personal memory: read the latest revision, then exclude archive.
+    const memory = await ResearchBridge.request("notes", {kb_id: result.base_id, confirmed: true,
+      title: "Versioned synthetic memory", body: "Personal synthetic memory: the trial size is five cases."});
+    const updatedMemory = await ResearchBridge.request("notes/" + memory.id, {kb_id: result.base_id,
+      expected_revision: memory.revision, confirmed: true, title: memory.title,
+      body: "Personal synthetic memory: the trial size is seven cases."});
+    const memoryResult = await ResearchBridge.request("ask", {kb_ids: [result.base_id], scope: "notes",
+      query: "In my personal synthetic memory, what is the trial size?"});
+    result.memory_latest_revision = memoryResult.claims?.some(claim => claim.citations.some(cite =>
+      cite.entity_id === memory.id && cite.revision === updatedMemory.revision &&
+      cite.support_quote.includes("seven cases"))) || false;
+    result.memory_model_visible = Boolean(memoryResult.trace?.model);
+    result.memory_timing_visible = Number.isInteger(memoryResult.trace?.elapsed_ms);
+    await ResearchBridge.request("notes/" + memory.id, {kb_id: result.base_id,
+      expected_revision: updatedMemory.revision, archived: true,
+      title: updatedMemory.title, body: updatedMemory.body, confirmed: true});
+    const archivedSearch = await searchReady({kb_ids: [result.base_id], scope: "notes", k: 20,
+      query: "Personal synthetic memory trial size"});
+    result.memory_archive_excluded = !archivedSearch.results.some(hit => hit.entity_id === memory.id);
+    if (__SUFFICIENCY_FIXTURE__) {
+      result.phase = "sufficiency"; await write(result);
+      doc.querySelector('[name="scope"][value="original"]').click();
+      doc.getElementById("newConversation").click();
+      const gate = doc.getElementById("sufficiencyGate");
+      result.sufficiency_default_off = gate.checked === false;
+      gate.checked = true;
+      const gateRun = async question => {
+        doc.getElementById("query").value = question;
+        doc.getElementById("askButton").click();
+        for (let attempt = 0; attempt < __QA_WAIT_ATTEMPTS__; attempt++) {
+          if (!doc.getElementById("askButton").disabled) break;
+          await Zotero.Promise.delay(100);
+        }
+        const jobs = await ResearchBridge.request("jobs", undefined, "GET");
+        const job = jobs.jobs.find(j => j.question === question && j.state === "succeeded");
+        return job ? await ResearchBridge.request("jobs/" + job.job_id, undefined, "GET") : null;
+      };
+      const passed = await gateRun(qaQuestion);
+      result.sufficiency_enabled_in_request = passed?.result?.trace?.sufficiency_gate === "experimental-model-v1";
+      result.sufficiency_answered = passed?.result?.status === "answered" &&
+        passed?.result?.trace?.calls?.map(c => c.role).join(",") === "sufficiency,answer,review";
+      result.sufficiency_trace_visible = doc.getElementById("results").textContent.includes("未经独立校准");
+      const rejected = await gateRun("fixture missing condition");
+      result.sufficiency_rejected_before_generation = rejected?.result?.status === "no_evidence" &&
+        rejected.result.claims.length === 0 && rejected.result.trace.calls.length === 2 &&
+        rejected.result.trace.calls.every(c => c.role === "sufficiency") &&
+        rejected.result.trace.supplementary_retrievals === 1;
+      gate.checked = false;
+      if (!result.sufficiency_default_off || !result.sufficiency_enabled_in_request ||
+          !result.sufficiency_answered || !result.sufficiency_trace_visible ||
+          !result.sufficiency_rejected_before_generation) throw new Error("Native sufficiency contract failed");
+    }
+    if (__VISUAL_FIXTURE__) {
+      result.phase = "visual"; await write(result);
+      doc.querySelector('[name="scope"][value="original"]').click();
+      doc.getElementById("newConversation").click();
+      doc.getElementById("multimodalEvidence").checked = true;
+      const visualQuestion = "Which bar is taller in the synthetic two-bar chart? Reply with one visual claim and set its text and observation to exactly blue or orange.";
+      doc.getElementById("query").value = visualQuestion;
+      doc.getElementById("askButton").click();
+      for (let attempt = 0; attempt < __QA_WAIT_ATTEMPTS__; attempt++) {
+        if (doc.querySelector(".visual-observation") && !doc.getElementById("askButton").disabled) break;
+        await Zotero.Promise.delay(100);
+      }
+      const observation = doc.querySelector(".visual-observation");
+      result.visual_label = observation?.textContent || "";
+      const visualClaim = observation?.closest(".answer-claim");
+      result.visual_not_exact_quote = Boolean(visualClaim && !visualClaim.querySelector("blockquote"));
+      result.visual_no_source_draft = Boolean(visualClaim && ![...visualClaim.querySelectorAll("button")]
+        .some(button => button.textContent === "保存为 AI 草稿"));
+      [...visualClaim?.querySelectorAll("button") || []].find(b => b.textContent === "查看引用图片")?.click();
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const image = doc.querySelector("img.visual-evidence");
+        if (image?.complete && image.naturalWidth > 0) break;
+        await Zotero.Promise.delay(100);
+      }
+      const image = doc.querySelector("img.visual-evidence");
+      result.visual_native_image_decoded = Boolean(image?.complete && image.naturalWidth === 240 && image.naturalHeight === 180);
+      const jobs = (await ResearchBridge.request("jobs", undefined, "GET")).jobs;
+      const visualJob = jobs.find(job => job.question === visualQuestion);
+      const saved = visualJob && await ResearchBridge.request("jobs/" + visualJob.job_id, undefined, "GET");
+      const citation = saved?.result?.claims?.[0]?.citations?.[0];
+      result.visual_durable_provenance = citation?.citation_type === "visual" &&
+        citation?.observation_source === "model_derived" && !!citation?.visual_asset?.image_hash;
+      result.visual_no_persisted_pixels = Boolean(saved && !JSON.stringify(saved).includes("data:image"));
+      result.visual_model = saved?.result?.trace?.model;
+      result.visual_model_calls = saved?.result?.trace?.model_calls;
+      result.visual_status = saved?.result?.status;
+      result.visual_source_matches_pdf = citation?.source_id === snapshot.entities.find(e => e.kind === "document")?.data?.hash + ".pdf";
+      doc.getElementById("qaHistory").click();
+      for (let attempt = 0; attempt < 100; attempt++) {
+        if ([...doc.querySelectorAll(".history-row")].some(row => row.querySelector("p")?.textContent === visualQuestion)) break;
+        await Zotero.Promise.delay(100);
+      }
+      const visualRow = [...doc.querySelectorAll(".history-row")].find(row => row.querySelector("p")?.textContent === visualQuestion);
+      visualRow?.querySelector(".source-button")?.click();
+      for (let attempt = 0; attempt < 100; attempt++) {
+        if (doc.querySelector(".visual-observation")) break;
+        await Zotero.Promise.delay(100);
+      }
+      result.visual_history_reopened = !!doc.querySelector(".visual-observation");
+      doc.getElementById("multimodalEvidence").checked = false;
+      if (!result.visual_label.includes("非原文摘录") || !result.visual_label.includes("blue") ||
+          !result.visual_not_exact_quote || !result.visual_no_source_draft || !result.visual_native_image_decoded ||
+          !result.visual_durable_provenance || !result.visual_no_persisted_pixels || !result.visual_history_reopened ||
+          !result.visual_source_matches_pdf || result.visual_model_calls !== 2 || result.visual_status !== "answered") {
+        throw new Error("Native synthetic visual acceptance mismatch");
+      }
     }
     // Exercise the explicit failed-job recovery path after the normal answer,
     // source and AI-draft assertions have completed. The fixture server raises
@@ -275,10 +409,12 @@ async function runNativeFixture() {
         !result.new_conversation_notice.includes("清除当前追问上下文") ||
         !result.qa_sections.includes("论文原文依据") || !result.qa_sections.includes("你的个人记录") ||
         !result.controls.qaHistory || !result.qa_history_rows ||
-        !result.qa_history_question.includes("scientific evidence") || !result.qa_history_reopened ||
+        !result.qa_history_question.includes(qaQuestion) || !result.qa_history_reopened ||
         !result.qa_feedback_button || !result.qa_feedback_saved ||
         !result.failed_history_retry_button || !result.failed_history_retry_created ||
-        !result.ai_draft_button || !result.ai_draft_saved || !result.ai_draft_confirmed) {
+        !result.ai_draft_button || !result.ai_draft_saved || !result.ai_draft_confirmed ||
+        !result.ai_draft_excluded_before_confirmation || !result.memory_latest_revision ||
+        !result.memory_model_visible || !result.memory_timing_visible || !result.memory_archive_excluded) {
       throw new Error("Acceptance mismatch");
     }
     result.phase = "passed";

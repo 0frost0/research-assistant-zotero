@@ -7,6 +7,13 @@ from pathlib import Path
 from threading import RLock
 
 
+def chat_base_url(value: str) -> str:
+    """Accept a copied Chat Completions URL without appending its path twice."""
+    value = value.strip().rstrip("/")
+    suffix = "/chat/completions"
+    return value[:-len(suffix)] if value.endswith(suffix) else value
+
+
 class ServiceConfigStore:
     """
     保存每个 Zotero connection 的服务配置。
@@ -71,6 +78,7 @@ class ServiceConfigStore:
 
     def save(self, connection: str, value: dict) -> dict:
         with self.lock:
+            value["llm"]["base_url"] = chat_base_url(value["llm"]["base_url"])
             all_configs = self._read()
             old = all_configs.get(connection, {})
             for section in ("llm", "embedding"):
@@ -78,7 +86,10 @@ class ServiceConfigStore:
                 previous = old.get(section, {})
                 current = value[section]
                 if not current["api_key"]:
-                    if previous.get("base_url") != current["base_url"]:
+                    previous_url = previous.get("base_url", "")
+                    if section == "llm":
+                        previous_url = chat_base_url(previous_url)
+                    if previous_url != current["base_url"]:
                         raise ValueError("更换 API 地址时必须重新输入密钥。")
                     current["api_key"] = previous.get("api_key", "")
                 if not current["api_key"] or len(current["api_key"]) > 8192:

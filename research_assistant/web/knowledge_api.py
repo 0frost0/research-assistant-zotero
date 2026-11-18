@@ -133,6 +133,7 @@ class KnowledgeAPI:
             "protocol": "vllm-qwen3-vl-messages-v1",
             "runtime_wired": True,
         })
+        result["llm"]["supports_images"] = value.get("llm", {}).get("supports_images", False) is True
         return result
 
     async def endpoint(self, request):
@@ -239,6 +240,10 @@ class KnowledgeAPI:
                             },
                         }
                         cleaned["embedding"]["dimension"] = embedding.get("dimension", 2048)
+                        supports_images = llm.get("supports_images", False)
+                        if type(supports_images) is not bool:
+                            raise ValueError("图片能力声明必须为布尔值。")
+                        cleaned["llm"]["supports_images"] = supports_images
                         cleaned["embedding"]["revision"] = embedding.get("revision", "1")
                         if (type(cleaned["embedding"]["dimension"]) is not int or
                                 not 1 <= cleaned["embedding"]["dimension"] <= 8192):
@@ -310,6 +315,19 @@ class KnowledgeAPI:
                         result = {"jobs": [self._parsing.submit(sha, mineru) for sha in hashes]}
                     elif action == "search":
                         result = await run_in_threadpool(self.service.search, data)
+                    elif action in {"visual", "visual-page"}:
+                        ids = data.get("kb_ids")
+                        if (not isinstance(ids, list) or not 1 <= len(ids) <= 20
+                                or not all(isinstance(k, str) and k for k in ids)):
+                            raise ValueError("请明确选择知识库。")
+                        if action == "visual":
+                            asset_id = data.get("asset_id")
+                            if not isinstance(asset_id, str) or len(asset_id) > 180:
+                                raise ValueError("图像标识无效。")
+                            result = await run_in_threadpool(self.service.visuals.encode, ids, asset_id)
+                        else:
+                            result = await run_in_threadpool(self.service.visuals.render_page, ids,
+                                                            data.get("source_id"), data.get("page"))
                     elif action in {"ask", "ask-async"}:
                         self._validate_ask_payload(data)
                         if action == "ask-async":
@@ -366,6 +384,12 @@ class KnowledgeAPI:
             raise ValueError("问答范围无效。")
         if data.get("strategy", "adaptive") not in {"fixed", "selected", "adaptive"}:
             raise ValueError("未知问答策略。")
+        if type(data.get("multimodal", False)) is not bool or (data.get("multimodal") and data.get("scope") == "notes"):
+            raise ValueError("图文证据仅适用于原文，选项须为布尔值。")
+        if type(data.get("sufficiency_gate", False)) is not bool or (data.get("sufficiency_gate") and data.get("scope") == "notes"):
+            raise ValueError("生成前证据检查仅适用于原文，选项须为布尔值。")
+        from research_assistant.knowledge.qa import algorithm_settings
+        algorithm_settings(data, data.get("strategy", "adaptive"))
         from research_assistant.knowledge.store import text
         text(data.get("query"), "研究问题", 2000)
         conversation_id = data.get("conversation_id")

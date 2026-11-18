@@ -11,6 +11,7 @@ The script measures retrieval and provenance only. It does not claim that a
 later generated answer is scientifically correct.
 """
 import argparse
+import asyncio
 import hashlib
 import json
 from pathlib import Path
@@ -19,7 +20,8 @@ import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from research_assistant.knowledge.service import KnowledgeService
+from research_assistant.knowledge.service import KnowledgeService, search_ready
+from research_assistant.core.service_context import stored_service_context
 from research_assistant.knowledge.store import KnowledgeStore
 from research_assistant.knowledge.qa import PERSONAL_NOTE_KINDS, note_candidate_relevant, normalized
 
@@ -83,7 +85,7 @@ def evaluate(args):
         snapshot = store.snapshot(case["kb_ids"])
         revisions = {base["id"]: base["revision"] for base in snapshot["bases"]}
         start = time.monotonic()
-        found = service.search({"query": case["query"], "kb_ids": case["kb_ids"], "scope": "notes", "k": 20})
+        found = asyncio.run(search_ready(service, {"query": case["query"], "kb_ids": case["kb_ids"], "scope": "notes", "k": 20}))
         store.assert_current(snapshot)
         elapsed = round((time.monotonic() - start) * 1000)
         raw_results = found.get("results", [])
@@ -101,9 +103,10 @@ def evaluate(args):
         report["cases"].append(row)
         print(f"{index}/{len(cases)} {case['id']}", flush=True)
     numeric = ["recall_at_6", "mrr_at_6", "revision_accuracy", "source_link_rate", "false_answer"]
-    report["summary"] = {key: {"mean": statistics.mean([r[key] for r in report["cases"] if r[key] is not None]),
-                                "n": sum(r[key] is not None for r in report["cases"])}
-                          for key in numeric}
+    report["summary"] = {}
+    for key in numeric:
+        values = [r[key] for r in report["cases"] if r[key] is not None]
+        report["summary"][key] = {"mean": statistics.mean(values) if values else None, "n": len(values)}
     report["summary"]["median_elapsed_ms"] = statistics.median(r["elapsed_ms"] for r in report["cases"])
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -124,9 +127,11 @@ if __name__ == "__main__":
                         help="Character n-gram coverage used when --apply-memory-gate is enabled")
     parser.add_argument("--case-ids", nargs="+")
     parser.add_argument("--max-cases", type=int, default=100)
+    parser.add_argument("--connection", help="读取 Zotero 服务面板保存的同一连接配置")
     args = parser.parse_args()
     if args.max_cases < 1:
         parser.error("max-cases must be positive")
     if not 0 <= args.min_coverage <= 1:
         parser.error("min-coverage must be between 0 and 1")
-    evaluate(args)
+    with stored_service_context(args.root, args.connection):
+        evaluate(args)

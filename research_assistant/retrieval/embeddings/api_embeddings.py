@@ -23,7 +23,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 class QwenAPIEmbeddings:
-    def __init__(self, config, *, cache_path=None):
+    def __init__(self, config, *, cache_path=None, cache_read_only=False):
         base = config["base_url"].rstrip("/")
         parsed = urlsplit(base)
         if (parsed.username or parsed.password or parsed.query or parsed.fragment
@@ -50,10 +50,20 @@ class QwenAPIEmbeddings:
             handlers.append(urllib.request.ProxyHandler({}))
         self.opener = urllib.request.build_opener(*handlers)
         self.cache_path = Path(cache_path) if cache_path else None
+        self.cache_read_only = cache_read_only
         if self.cache_path:
-            self.cache_path.parent.mkdir(parents=True, exist_ok=True)
-            with closing(sqlite3.connect(self.cache_path)) as con, con:
-                con.execute("CREATE TABLE IF NOT EXISTS vectors (key TEXT PRIMARY KEY, vector TEXT NOT NULL)")
+            if self.cache_read_only:
+                if not self.cache_path.is_file():
+                    raise ValueError("Read-only embedding cache does not exist")
+            else:
+                self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+                with closing(sqlite3.connect(self.cache_path)) as con, con:
+                    con.execute("CREATE TABLE IF NOT EXISTS vectors (key TEXT PRIMARY KEY, vector TEXT NOT NULL)")
+
+    def _cache_connection(self):
+        if self.cache_read_only:
+            return sqlite3.connect(self.cache_path.resolve().as_uri() + "?mode=ro", uri=True)
+        return sqlite3.connect(self.cache_path)
 
     @staticmethod
     def _image(path):
@@ -79,7 +89,7 @@ class QwenAPIEmbeddings:
         cache_key = hashlib.sha256(json.dumps(
             [self.model_name, instruction, content], sort_keys=True).encode()).hexdigest()
         if self.cache_path:
-            with closing(sqlite3.connect(self.cache_path)) as con:
+            with closing(self._cache_connection()) as con:
                 row = con.execute("SELECT vector FROM vectors WHERE key=?", (cache_key,)).fetchone()
             if row:
                 vector = json.loads(row[0])
@@ -113,8 +123,8 @@ class QwenAPIEmbeddings:
         if not math.isfinite(norm) or norm <= 0:
             raise ValueError("Invalid embedding norm")
         vector = [v / norm for v in vector]
-        if self.cache_path:
-            with closing(sqlite3.connect(self.cache_path)) as con, con:
+        if self.cache_path and not self.cache_read_only:
+            with closing(self._cache_connection()) as con, con:
                 con.execute("INSERT OR REPLACE INTO vectors VALUES (?, ?)", (cache_key, json.dumps(vector)))
         return vector
 

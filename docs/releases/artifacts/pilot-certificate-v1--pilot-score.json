@@ -1,0 +1,133 @@
+{
+  "pairs": 32,
+  "skip": 128,
+  "baseline": "chain",
+  "provenance": {
+    "chain": {
+      "manifest_sha256": "37c725a9fb3891ca03d200b35ddeef30127ee9941b49647dc4360835c154a111",
+      "predictions_sha256": "5725513a8234c1966afa6641a283b73feda4afb314199adcc9bfbcf8765066db",
+      "prompt_sha256": "6ce29a4edacf1353a6a7550cbc5aa0fd67ea5b1926f5f8c2795a13926cdd07d2"
+    },
+    "certificate": {
+      "manifest_sha256": "37c725a9fb3891ca03d200b35ddeef30127ee9941b49647dc4360835c154a111",
+      "predictions_sha256": "5725513a8234c1966afa6641a283b73feda4afb314199adcc9bfbcf8765066db",
+      "prompt_sha256": "a32ae5fdb36df36f8ccfd3af9330e927b6503995c9d57954d7b3528c8c8b84d0"
+    }
+  },
+  "inputs_sha256": "2d7123466cc4a365ec3d29b50ebd80b83bf774868848bd6e787e2b00f63caf54",
+  "gold_sha256": "08f17ec1161e52160c86df29dcd7888149d72263919eb036634710bc9b3812da",
+  "scores": {
+    "chain": {
+      "n": 64,
+      "counts": {
+        "positive": 32,
+        "fn_or_invalid": 17,
+        "negative": 32,
+        "tn": 29,
+        "tp": 15,
+        "fp_or_invalid": 3,
+        "false_pass": 3
+      },
+      "balanced_accuracy": 0.6875,
+      "sufficient_recall": 0.46875,
+      "insufficient_failure_rate": 0.09375,
+      "observed_false_pass_rate": 0.09375,
+      "invalid_rate": 0.0,
+      "both_sides_correct": 0.375
+    },
+    "certificate": {
+      "n": 64,
+      "counts": {
+        "positive": 32,
+        "fn_or_invalid": 25,
+        "negative": 32,
+        "tn": 29,
+        "tp": 7,
+        "fp_or_invalid": 3,
+        "false_pass": 2,
+        "invalid": 1
+      },
+      "balanced_accuracy": 0.5625,
+      "sufficient_recall": 0.21875,
+      "insufficient_failure_rate": 0.09375,
+      "observed_false_pass_rate": 0.0625,
+      "invalid_rate": 0.015625,
+      "both_sides_correct": 0.125
+    }
+  },
+  "comparisons": {
+    "certificate": {
+      "delta": {
+        "balanced_accuracy": -0.125,
+        "sufficient_recall": -0.25,
+        "insufficient_failure_rate": 0.0
+      },
+      "paired_bootstrap_95_accuracy_delta": [
+        -0.21875,
+        -0.046875
+      ],
+      "meaningful_gain_passed": false,
+      "bootstrap": "5000 resamples of whole question pairs, seed17"
+    }
+  },
+  "generation": {
+    "chain": {
+      "status_counts": {
+        "ok": 64
+      },
+      "median_seconds": 4.517202546354383,
+      "output_tokens": 9785
+    },
+    "certificate": {
+      "status_counts": {
+        "ok": 63,
+        "invalid_output": 1
+      },
+      "median_seconds": 8.920244594104588,
+      "output_tokens": 22193
+    }
+  },
+  "production_ready": false,
+  "boundary": "Exploratory reserve pilot; separate confirmation required. Failures counted incorrect, not repaired.",
+  "scorer_sha256": "ef1141f768b41935f55223a482e8bab5e49fe18181d637d1eb489b90b9008e6e",
+  "certificate_diagnostics": {
+    "proposal_only_score": {
+      "n": 64,
+      "counts": {
+        "positive": 32,
+        "tp": 20,
+        "negative": 32,
+        "fp_or_invalid": 18,
+        "false_pass": 17,
+        "fn_or_invalid": 12,
+        "tn": 14,
+        "invalid": 1
+      },
+      "balanced_accuracy": 0.53125,
+      "sufficient_recall": 0.625,
+      "insufficient_failure_rate": 0.5625,
+      "observed_false_pass_rate": 0.53125,
+      "invalid_rate": 0.015625,
+      "both_sides_correct": 0.1875
+    },
+    "decision_reasons": {
+      "relation_or_coverage_rejected": 28,
+      "quote_not_found": 26,
+      "verified": 9,
+      "invalid_certificate": 1
+    },
+    "verifier_calls": 37,
+    "boundary": "Proposal-only is a diagnostic ablation, not a selected alternative.",
+    "recall_up_and_false_pass_down": false,
+    "verifier_effect_by_class": {
+      "sufficient": {
+        "rejected": 13,
+        "accepted": 7
+      },
+      "insufficient": {
+        "rejected": 15,
+        "accepted": 2
+      }
+    }
+  }
+}

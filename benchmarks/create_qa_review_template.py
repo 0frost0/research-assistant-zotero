@@ -13,6 +13,7 @@ Input JSON can be either a list of objects or ``{"cases": [...]}``:
 from __future__ import annotations
 
 import argparse
+import asyncio
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -24,8 +25,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from dotenv import load_dotenv
 
 from research_assistant.knowledge.jobs import QAJobStore
-from research_assistant.knowledge.qa import select_candidates
-from research_assistant.knowledge.service import KnowledgeService
+from research_assistant.knowledge.qa import initial_queries, merge_candidates, select_candidates
+from research_assistant.knowledge.service import KnowledgeService, search_ready
+from research_assistant.core.service_context import stored_service_context
 from research_assistant.knowledge.store import KnowledgeStore, text
 
 
@@ -80,10 +82,16 @@ def build_template(root: Path, questions, backend="multimodal", top_k=10):
     cases = []
     for case in questions:
         snapshot = store.snapshot(case["kb_ids"])
-        found = service.search({"query": case["query"], "kb_ids": case["kb_ids"],
-                                "scope": "original", "k": top_k})
-        candidates = select_candidates(found.get("results", []), strategy="selected",
+        pool, warnings = [], []
+        for query in initial_queries(case["query"], case["query"], "adaptive"):
+            found = asyncio.run(search_ready(service, {"query": query, "kb_ids": case["kb_ids"],
+                                                       "scope": "original", "k": 20, "text_only": True}))
+            pool = merge_candidates(found.get("results", []), pool)
+            if found.get("warning"):
+                warnings.append(found["warning"])
+        candidates = select_candidates(pool, strategy="adaptive", question=case["query"],
                                        limit=top_k, char_budget=20_000)
+        store.assert_current(snapshot)
         evidence = [{key: item.get(key) for key in (
             "source_id", "page", "quote", "title", "url", "kind", "revision"
         ) if item.get(key) is not None} for item in candidates]
@@ -94,7 +102,7 @@ def build_template(root: Path, questions, backend="multimodal", top_k=10):
             "candidate_evidence": evidence,
             "human_decision": None,
             "knowledge_revisions": {base["id"]: base["revision"] for base in snapshot["bases"]},
-            "retrieval_warning": found.get("warning"),
+            "retrieval_warning": " ".join(dict.fromkeys(warnings)) or None,
         })
     return {
         "id": "qa-review-template-v1",
@@ -151,13 +159,15 @@ def main(argv=None):
     parser.add_argument("--scope", choices=["original"], default="original",
                         help="QA 模板只接受论文原文问题；个人记录请使用 create_memory_review_template.py")
     parser.add_argument("--model-config", type=Path)
+    parser.add_argument("--connection", help="读取 Zotero 服务面板保存的同一连接配置")
     args = parser.parse_args(argv)
     load_dotenv(args.model_config or args.root / ".env")
     if args.job_limit < 1 or args.job_limit > 1000:
         parser.error("--job-limit 必须在 1 到 1000 之间")
     questions = (load_questions(args.questions) if args.questions else
                  load_questions_from_jobs(args.qa_jobs, args.job_limit, args.scope))
-    payload = build_template(args.root, questions, args.backend, args.top_k)
+    with stored_service_context(args.root, args.connection):
+        payload = build_template(args.root, questions, args.backend, args.top_k)
     write_atomic(args.output, payload)
     print(json.dumps({"output": str(args.output), "cases": len(payload["cases"]),
                       "status": payload["status"], "model_calls": 0}, ensure_ascii=False))

@@ -8,6 +8,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -22,13 +23,24 @@ from research_assistant.retrieval.embeddings.api_embeddings import QwenAPIEmbedd
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--prefs', type=Path, required=True)
+    connection_source = parser.add_mutually_exclusive_group(required=True)
+    connection_source.add_argument('--prefs', type=Path)
+    connection_source.add_argument('--connection')
+    parser.add_argument('--ssh-host', default='research-web')
+    parser.add_argument('--remote-root', default='/home/ubuntu/research-assistant/app')
     args = parser.parse_args()
-    prefs = args.prefs.read_text(encoding='utf-8')
-    match = re.search(r'user_pref\("extensions\.researchAssistant\.connection",\s*("(?:[^"\\]|\\.)*")\);', prefs)
-    if not match:
-        raise RuntimeError('Zotero connection profile missing')
-    connection = json.loads(match[1])
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.@-]*', args.ssh_host):
+        raise ValueError('Use an SSH config alias')
+    if not args.remote_root.startswith('/') or '\n' in args.remote_root or '\r' in args.remote_root:
+        raise ValueError('Remote root must be an absolute POSIX path')
+    if args.connection:
+        connection = args.connection
+    else:
+        prefs = args.prefs.read_text(encoding='utf-8')
+        match = re.search(r'user_pref\("extensions\.researchAssistant\.connection",\s*("(?:[^"\\]|\\.)*")\);', prefs)
+        if not match:
+            raise RuntimeError('Zotero connection profile missing')
+        connection = json.loads(match[1])
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     for attempt in range(20):
         try:
@@ -40,8 +52,8 @@ def main():
                 raise RuntimeError('Qwen loopback tunnel/service unavailable') from None
             time.sleep(2)
     key = subprocess.check_output([
-        'ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', 'research-web',
-        'cat /home/ubuntu/research-assistant/app/deployment/embedding/api-key'], timeout=20, text=True).strip()
+        'ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', args.ssh_host,
+        'cat ' + shlex.quote(args.remote_root.rstrip('/') + '/deployment/embedding/api-key')], timeout=20, text=True).strip()
     if not key:
         raise RuntimeError('Remote key missing')
     config = {'base_url': 'http://127.0.0.1:30001/v1', 'model': health['model_id'],
@@ -49,7 +61,9 @@ def main():
     adapter = QwenAPIEmbeddings(config)
     vectors = adapter.embed_texts(['白色背景上有一个红色矩形。', 'A red rectangle on a white background.'])
     from PIL import Image, ImageDraw
-    with tempfile.TemporaryDirectory() as directory:
+    temporary_root = ROOT / '.cache/configure-qwen'
+    temporary_root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=temporary_root) as directory:
         path = Path(directory) / 'synthetic.png'
         image = Image.new('RGB', (128, 128), 'white')
         ImageDraw.Draw(image).rectangle((24, 32, 104, 96), fill='red')

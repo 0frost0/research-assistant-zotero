@@ -15,9 +15,12 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from dotenv import load_dotenv
-from research_assistant.knowledge.qa import EvidenceQA, normalized, select_candidates
-from research_assistant.knowledge.service import KnowledgeService
+from research_assistant.knowledge.qa import (EvidenceQA, initial_queries, merge_candidates,
+                                              normalized, select_candidates, algorithm_settings,
+                                              rerank_candidates)
+from research_assistant.knowledge.service import KnowledgeService, search_ready
 from research_assistant.knowledge.store import KnowledgeStore
+from research_assistant.core.service_context import stored_service_context
 from benchmarks.validate_knowledge_qa_dataset import validate_dataset
 
 
@@ -43,7 +46,21 @@ def evidence_metrics(evidence, expected):
             "mrr_at_6": (1 / first if first else 0) if expected else None}
 
 
+def evaluation_arms(strategies, gates, with_model):
+    """Same strategy/algorithm with gate off/on; no hidden paid gate-only run."""
+    if "on" in gates and not with_model:
+        raise ValueError("sufficiency gate evaluation requires --with-model (paid calls)")
+    if len(set(strategies)) != len(strategies) or len(set(gates)) != len(gates):
+        raise ValueError("duplicate evaluation arms are not allowed")
+    return [(strategy, gate == "on") for strategy in strategies for gate in gates]
+
+
+def model_call_bound(arms):
+    return sum(4 if strategy == "adaptive" else 3 if gate else 2 for strategy, gate in arms)
+
+
 async def evaluate(args):
+    arms = evaluation_arms(args.strategies, args.sufficiency_gates, args.with_model)
     raw = args.dataset.read_bytes()
     dataset = json.loads(raw)
     split = check_split(dataset, args.expected_split)
@@ -60,6 +77,10 @@ async def evaluate(args):
               "split": split, "expected_split": args.expected_split,
               "with_model": args.with_model, "backend": args.backend,
               "case_limit": args.max_cases, "k": 6, "char_budget": 12000,
+              "policy": "zotero-evidence-v3",
+              "sufficiency_gates": args.sufficiency_gates,
+              "max_generation_calls_per_case": model_call_bound(arms) if args.with_model else 0,
+              "quality_boundary": "Uncalibrated model judgment; human support fields remain unscored.",
               "dataset_validation": {k: v for k, v in validation.items() if k != "errors"},
               "cases": []}
     for i, case in enumerate(cases):
@@ -67,24 +88,50 @@ async def evaluate(args):
             raise ValueError("Expected evidence must be empty only for no-answer cases")
         snapshot = store.snapshot(case["kb_ids"])
         versions = {b["id"]: b["revision"] for b in snapshot["bases"]}
-        begin = time.monotonic()
-        found = service.search({**case, "scope": "original", "k": 20})
-        retrieval_ms = round((time.monotonic() - begin) * 1000)
-        strategies = list(args.strategies) if args.with_model else ["fixed", "selected"]
+        retrieval_cache = {}
         # Alternate order to reduce (not eliminate) warm-cache/provider order bias.
-        strategies = strategies[i % len(strategies):] + strategies[:i % len(strategies)]
-        for strategy in strategies:
+        ordered_arms = arms[i % len(arms):] + arms[:i % len(arms)]
+        for strategy, gate in ordered_arms:
+            options = {**case, "strategy": strategy, "sufficiency_gate": gate}
+            if args.algorithm:
+                options["algorithm"] = args.algorithm
+            algorithm, mode = algorithm_settings(options, strategy)
+            if mode not in retrieval_cache:
+                begin = time.monotonic()
+                found = await search_ready(service, {**case, "scope": "original", "k": 20,
+                                                     "text_only": True, "retrieval_mode": mode})
+                retrieval_cache[mode] = found, round((time.monotonic() - begin) * 1000)
+            found, retrieval_ms = retrieval_cache[mode]
+            actual_backend, actual_warning = found["backend"], found.get("warning")
             if args.with_model:
-                result = await qa.ask({**case, "strategy": strategy})
+                result = await qa.ask(options)
                 evidence, trace = result["evidence"], result["trace"]
             else:
-                evidence = select_candidates(found["results"], strategy)
-                trace = {"model_calls": 0, "total_tokens": 0, "unknown_usage_calls": 0}
+                pool = found["results"]
+                search_count, extra_ms = 1, 0
+                for query in initial_queries(case["query"], case["query"], strategy)[1:]:
+                    stage = time.monotonic()
+                    extra = await search_ready(service, {**case, "query": query, "scope": "original",
+                                                          "k": 20, "text_only": True, "retrieval_mode": mode})
+                    extra_ms += round((time.monotonic() - stage) * 1000)
+                    search_count += 1
+                    pool = merge_candidates(extra["results"], pool)
+                pool, rerank = await rerank_candidates(pool, case["query"],
+                    enabled=algorithm in {"hybrid_rerank", "hybrid_set"})
+                evidence = select_candidates(pool, strategy, question=case["query"],
+                    selection_mode="complementary" if algorithm == "hybrid_set" else "legacy")
+                trace = {"model_calls": 0, "total_tokens": 0, "unknown_usage_calls": 0,
+                         "algorithm": algorithm, "rerank": rerank,
+                         "candidate_recall": evidence_metrics(pool, case["expected"])["recall_at_6"],
+                         "retrieval_calls": search_count, "candidates": len(pool),
+                         "retrieval_ms": retrieval_ms + extra_ms}
                 result = {"status": "retrieval_only", "claims": []}
             store.assert_current(snapshot)
-            report["cases"].append({"id": case["id"], "strategy": strategy,
+            report["cases"].append({"id": case["id"], "strategy": strategy, "algorithm": algorithm,
+                "sufficiency_gate": gate,
+                "arm": strategy + ("+gate" if gate else "+no_gate"),
                 **evidence_metrics(evidence, case["expected"]), "initial_retrieval_ms": retrieval_ms,
-                "retrieval_backend": found["backend"], "warning": found.get("warning"),
+                 "retrieval_backend": trace.get("retrieval_backend", actual_backend), "warning": actual_warning,
                 "revisions": versions,
                 "no_answer": case["no_answer"], "status": result["status"], "trace": trace,
                 "completed": result["status"] in {"answered", "partial", "no_evidence"} if args.with_model else None,
@@ -93,8 +140,8 @@ async def evaluate(args):
                 "human_support": None, "human_comparability": None})
         print(f"{i + 1}/{len(cases)}", flush=True)
     report["summary"] = {}
-    for strategy in sorted({c["strategy"] for c in report["cases"]}):
-        rows = [c for c in report["cases"] if c["strategy"] == strategy]
+    for arm in sorted({c["arm"] for c in report["cases"]}):
+        rows = [c for c in report["cases"] if c["arm"] == arm]
         metrics = {}
         for key in ("recall_at_6", "mrr_at_6", "false_answer", "completed"):
             values = [c[key] for c in rows if c[key] is not None]
@@ -103,7 +150,8 @@ async def evaluate(args):
         metrics["unknown_usage_calls"] = sum(c["trace"]["unknown_usage_calls"] for c in rows)
         times = [c["trace"]["elapsed_ms"] for c in rows if "elapsed_ms" in c["trace"]]
         metrics["median_elapsed_ms"] = statistics.median(times) if times else None
-        report["summary"][strategy] = metrics
+        key = rows[0]["strategy"] if args.sufficiency_gates == ["off"] else arm
+        report["summary"][key] = metrics
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report["summary"], ensure_ascii=False, indent=2))
@@ -115,10 +163,15 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--backend", choices=["tfidf", "multimodal"], default="multimodal")
-    parser.add_argument("--with-model", action="store_true", help="Makes real API calls (at most 8/case across three strategies)")
+    parser.add_argument("--with-model", action="store_true", help="Paid generation: default <=8 calls/case; all gate off/on arms <=18")
+    parser.add_argument("--sufficiency-gates", nargs='+', choices=['off', 'on'], default=['off'],
+                        help="Controlled gate ablation; on requires --with-model. Default unchanged.")
     parser.add_argument("--model-config", type=Path)
+    parser.add_argument("--connection", help="Use the service profile saved in Zotero instead of relying on .env")
     parser.add_argument("--case-ids", nargs='+')
     parser.add_argument("--strategies", nargs='+', choices=['fixed', 'selected', 'adaptive'], default=['fixed', 'selected', 'adaptive'])
+    parser.add_argument("--algorithm", choices=['legacy', 'hybrid', 'hybrid_rerank', 'hybrid_set'],
+                        help="Freeze an algorithm for ablation; default adaptive uses hybrid_rerank")
     parser.add_argument("--max-cases", type=int, default=3)
     parser.add_argument("--expected-split", choices=["development", "test", "synthetic"],
                         help="Refuse to score a dataset declared with another split.")
@@ -128,4 +181,5 @@ if __name__ == "__main__":
     if args.max_cases < 1:
         parser.error("max-cases must be positive")
     load_dotenv(args.model_config or args.root / ".env")
-    asyncio.run(evaluate(args))
+    with stored_service_context(args.root, args.connection):
+        asyncio.run(evaluate(args))

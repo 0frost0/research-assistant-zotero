@@ -273,6 +273,14 @@ class PersistentTextIndexTests(unittest.TestCase):
             self.assertEqual(index.client.count(index.collection_name, exact=True).count, 2)
             self.assertEqual(embeddings.captions, [chunks[0].page_content])
 
+            # Filter in Qdrant, before top-k: image hits cannot displace QA text.
+            text_hits = index.search("同一问题", k=1, min_score=0, modality="text")
+            self.assertEqual([hit.modality for hit in text_hits], ["text"])
+            self.assertEqual([hit.modality for hit in index.search(
+                "同一问题", k=1, min_score=0, modality="image")], ["image"])
+            with self.assertRaises(ValueError):
+                index.search("同一问题", k=1, min_score=0, modality="other")
+
             # Simulate an empty restored database with a NEW memory-only client.
             index.client.close()
             index.client = QdrantClient(":memory:")

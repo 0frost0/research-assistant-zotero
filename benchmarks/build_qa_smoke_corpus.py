@@ -10,7 +10,7 @@ from pypdf.generic import DictionaryObject, NameObject, DecodedStreamObject
 from research_assistant.knowledge.store import KnowledgeStore, digest
 
 
-def build(root):
+def build(root, definitions=False):
     root.mkdir(parents=True, exist_ok=False)
     store = KnowledgeStore(root)
     base = store.create({"connection": "qa-smoke", "library": "user:0", "collection": "A", "name": "Synthetic QA"})
@@ -18,6 +18,8 @@ def build(root):
         "In a synthetic randomized trial, 200 adults with heart failure received treatment A. The primary endpoint was all-cause mortality at 12 months. Treatment A did not reduce mortality in this small cohort. Patients with severe renal impairment were excluded.",
         "In a synthetic study of 500 adults with heart failure, treatment B reduced hospital admissions over 24 months. This observational study did not assess mortality. Its nonrandomized design limits causal conclusions.",
     ]
+    if definitions:
+        passages.append("Heart failure (HF) is a complex clinical syndrome. This synthetic fixture is for software retrieval tests, not a scientific reference or clinical guidance.")
     entities, hashes = [], []
     for i, passage in enumerate(passages):
         writer = PdfWriter()
@@ -52,14 +54,23 @@ def build(root):
         ("这两篇论文是否比较了脑肿瘤手术效果？", None, ""),
         ("A治疗的药物剂量是多少？", None, ""),
     ]
+    if definitions:
+        questions.extend([
+            ("什么是心衰", 2, "Heart failure (HF) is a complex clinical syndrome"),
+            ("心力衰竭的定义是什么？", 2, "Heart failure (HF) is a complex clinical syndrome"),
+            ("What is heart failure?", 2, "Heart failure (HF) is a complex clinical syndrome"),
+            ("什么是量子计算？", None, ""),
+        ])
     cases = [{"id": f"S{i + 1:02}", "query": q, "kb_ids": [base['id']], "no_answer": doc is None,
               "expected": [] if doc is None else [{"source_id": hashes[doc] + '.pdf', "page": 1, "quote": quote}]}
              for i, (q, doc, quote) in enumerate(questions)]
-    (root / 'dataset.json').write_text(json.dumps({"id": "synthetic-qa-smoke-v1", "split": "synthetic", "cases": cases}, ensure_ascii=False, indent=2), encoding='utf-8')
+    (root / 'dataset.json').write_text(json.dumps({"id": "synthetic-qa-definition-v2" if definitions else "synthetic-qa-smoke-v1", "split": "synthetic", "cases": cases}, ensure_ascii=False, indent=2), encoding='utf-8')
     print(root / 'dataset.json')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--root', required=True, type=Path)
-    build(parser.parse_args().root)
+    parser.add_argument('--definitions', action='store_true', help='Add bilingual definition and no-answer cases (synthetic only)')
+    args = parser.parse_args()
+    build(args.root, definitions=args.definitions)

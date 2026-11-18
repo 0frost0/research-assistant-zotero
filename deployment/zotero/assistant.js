@@ -79,6 +79,7 @@ async function openServiceConfig() {
       $(prefix + "Key").placeholder = config[section].has_api_key ? "已配置；留空保留" : "请输入密钥";
     }
     $("serviceMineruMode").value = config.mineru.mode || 'remote';
+    $("serviceLlmImages").checked = config.llm.supports_images === true;
     $("serviceEmbeddingDimension").value = config.embedding.dimension || 2048;
     $("serviceEmbeddingRevision").value = config.embedding.revision || "1";
     $("serviceMineruUrl").value = config.mineru.url || "";
@@ -511,6 +512,8 @@ async function runSearch(event) {
       kb_ids: [...selected],
       query: $("query").value,
       scope: document.querySelector("[name=scope]:checked").value,
+      ...($("multimodalEvidence").checked && document.querySelector("[name=scope]:checked").value !== "notes" ? {multimodal: true} : {}),
+      ...(asking && $("sufficiencyGate").checked && document.querySelector("[name=scope]:checked").value !== "notes" ? {sufficiency_gate: true} : {}),
       ...(asking ? {conversation_id: conversationId} : {}),
     };
     let result = await bridge.request(asking ? "ask-async" : "search", searchPayload);
@@ -561,7 +564,11 @@ async function runSearch(event) {
         node("span", hit.title || "未命名资料", "result-title")
       );
       row.append(heading, node("p", hit.quote, "quote"));
-      if (hit.modality === "image") row.append(node("p", "图像命中：下方文字为图注或定位信息，请打开原文核对图中细节。", "muted"));
+      if (hit.modality === "image") {
+        row.append(node("p", "图像候选：图注不是像素观察，请打开图片和原文核对细节。", "muted"));
+        if (hit.visual_caption) row.append(node("p", "解析图注（未经独立核验）：" + hit.visual_caption, "muted"));
+        appendVisualEvidence(row, hit);
+      }
       const source = node("button", hit.page ? `回到 Zotero 第 ${hit.page} 页` : "查看来源", "source-button");
       source.type = "button";
       source.addEventListener("click", () => {
@@ -577,7 +584,7 @@ async function runSearch(event) {
         }
       });
       row.append(source, node("span", ` · v${hit.revision}`, "muted"));
-      if (hit.quote && hit.kind === "original" && (hit.source_id || hit.source)) {
+      if (hit.quote && hit.modality !== "image" && hit.kind === "original" && (hit.source_id || hit.source)) {
         const remember = node("button", "写入专题笔记", "source-button");
         remember.type = "button";
         remember.addEventListener("click", () => {
@@ -695,6 +702,35 @@ async function renderQAHistory() {
   }
 }
 
+function appendVisualEvidence(container, cite) {
+  const assetId = cite.visual_asset?.asset_id;
+  if (!assetId) return;
+  const button = node("button", "查看引用图片", "source-button");
+  button.type = "button";
+  // Capture this result's scope; changing selected bases must not broaden a read.
+  const kbIds = [...selected];
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    try {
+      const asset = await bridge.request("visual", {kb_ids: kbIds, asset_id: assetId});
+      if (asset.asset_id !== assetId || asset.source_id !== cite.source_id || asset.page !== cite.page ||
+          asset.image_hash !== cite.visual_asset.image_hash || asset.document_version !== cite.visual_asset.document_version ||
+          typeof asset.data_url !== "string" || !asset.data_url.startsWith("data:image/png;base64,")) {
+        throw new Error("引用图片版本不匹配，请重新检索。");
+      }
+      const image = node("img", "", "visual-evidence");
+      image.setAttribute("src", asset.data_url);
+      image.setAttribute("alt", "引用的论文图片；请结合原文页核对模型观察");
+      container.append(image);
+      button.textContent = "图片已加载（请核对原文）";
+    } catch (error) {
+      notice(error.message);
+      button.disabled = false;
+    }
+  });
+  container.append(button);
+}
+
 function renderAnswer(result, jobId = null) {
   const statuses = { answered: "已生成有据回答", partial: "仅能回答部分问题", no_evidence: "现有证据不足",
     model_unavailable: "请配置回答模型", unavailable: "服务暂不可用", timeout: "已超时停止", indexing: "语义索引准备中" };
@@ -746,7 +782,13 @@ function renderAnswer(result, jobId = null) {
             if (base) selectBase(base).then(() => showView("notes"));
           }
         });
-        row.append(link, node("blockquote", cite.support_quote, "quote"));
+        row.append(link);
+        if (cite.citation_type === "visual") {
+          row.append(node("p", "模型视觉观察（非原文摘录）：" + (cite.observation || ""), "visual-observation"));
+          appendVisualEvidence(row, cite);
+        } else {
+          row.append(node("blockquote", cite.support_quote, "quote"));
+        }
         if (isNote) {
           for (const anchor of cite.anchors || []) {
             const source = node("button", `回到原文${anchor.page ? ` · 第 ${anchor.page} 页` : ""}`, "source-button");
@@ -762,7 +804,8 @@ function renderAnswer(result, jobId = null) {
       }
       // 论文回答可以沉淀为个人记忆，但只能先保存为未确认 AI 草稿。
       // 用户必须在“专题笔记”侧栏中核对并确认，避免模型结论直接进入默认检索。
-      if (section.scope === "original" && claim.text && value.scope !== "notes") {
+      if (section.scope === "original" && claim.text && value.scope !== "notes" &&
+          !(claim.citations || []).some(cite => cite.citation_type === "visual" || cite.modality === "image")) {
         const saveDraft = node("button", "保存为 AI 草稿", "source-button");
         saveDraft.type = "button";
         saveDraft.addEventListener("click", async () => {
@@ -812,24 +855,38 @@ function renderAnswer(result, jobId = null) {
   details.append(node("summary", "检索过程与用量"));
   for (const step of result.trace.steps) {
     const scopeLabel = step.scope === "notes" ? "个人记录" : step.scope === "original" ? "论文原文" : "回答";
+    if (step.stage === "memory_rewrite") {
+      details.append(node("p", `个人记录 · 检索词改写：${step.query} · ${step.candidates} 条候选`));
+      continue;
+    }
+    if (step.stage === "sufficiency") {
+      details.append(node("p", `${scopeLabel} · 第 ${step.round} 轮生成前证据检查：${step.sufficient ? "可尝试生成（模型判断）" : "证据不足，未生成"} · ${step.selected} 条证据 · 未经独立校准`));
+      continue;
+    }
     details.append(node("p", step.stage === "retrieve"
-      ? `${scopeLabel} · 第 ${step.round} 轮${step.reused ? "复用证据" : "检索"}：${step.query} · ${step.candidates} 候选 / ${step.selected} 入选`
+      ? `${scopeLabel} · 第 ${step.round} 轮${step.reused ? "复用候选" : "检索"}：${step.searches?.map(s => s.query).join("；") || step.query} · ${step.candidates} 条去重候选 / ${step.selected} 条供本轮回答` +
+        (step.new_selected !== undefined ? ` / ${step.new_selected} 条首次入选` : "") +
+        (step.algorithm ? ` · 算法 ${step.algorithm}` : "") +
+        (step.rerank ? ` · 精排 ${step.rerank.status === "succeeded" ? "完成" : step.rerank.status === "disabled" ? "未启用" : "未完成（保留召回排序）"}` : "") +
+        ` · 检索与筛选 ${((step.elapsed_ms || 0) / 1000).toFixed(1)} 秒`
       : `${scopeLabel} · 第 ${step.round} 轮核对：${step.draft_claims} 草稿 / ${step.accepted} 支持`));
   }
   const callStatus = {succeeded: "成功", timeout: "超时", error: "异常", invalid_output: "输出未通过校验", cancelled: "已取消"};
   for (const call of result.trace.calls || []) {
     const usage = call.usage === "known" ? "用量已知" : "用量未知";
-    details.append(node("p", `模型调用 ${call.role} · ${callStatus[call.status] || call.status} · ${call.elapsed_ms || 0} ms · ${usage}`));
+    details.append(node("p", `模型调用 ${call.role} · ${callStatus[call.status] || call.status} · ${call.elapsed_ms || 0} ms · ${usage}` +
+      (Number.isInteger(call.images_sent) ? ` · ${call.images_sent} 张图片（含重发）` : "")));
   }
   details.append(node("p", `输入 ${result.trace.input_tokens} / 输出 ${result.trace.output_tokens} token` +
     (result.trace.unknown_usage_calls ? `；${result.trace.unknown_usage_calls} 次调用用量未知（未按零计费）` : "")));
   if (result.trace.conversation_context_used) {
     details.append(node("p", `追问上下文：使用同一知识库最近 ${result.trace.conversation_turns || 0} 轮导航信息；未作为论文证据。`));
   }
-  details.append(node("p", `回答模型：${result.trace.model || "未配置"} · 复核模型：${result.trace.review_model || result.trace.model || "未配置"}`));
+  details.append(node("p", `回答模型：${result.trace.model || "未配置"}` +
+    (result.scope === "notes" ? "" : ` · 复核模型：${result.trace.review_model || result.trace.model || "未配置"}`)));
   panel.append(details);
   $("results").append(panel);
-  $("resultMeta").textContent = `${result.trace.model_calls} 次模型调用 · 补检索 ${result.trace.rewrite_rounds} 次 · 纠正 ${result.trace.correction_rounds || 0} 轮` +
+  $("resultMeta").textContent = `${result.trace.model_calls} 次模型调用 · 检索 ${result.trace.retrieval_calls} 次 · 查询改写 ${result.trace.rewrite_rounds} 次 · 纠正 ${result.trace.correction_rounds || 0} 轮` +
     (result.trace.conversation_context_used ? ` · 追问上下文 ${result.trace.conversation_turns} 轮` : "") +
     ` · ${(result.trace.elapsed_ms / 1000).toFixed(1)} 秒`;
 }
@@ -1059,6 +1116,7 @@ $("serviceConfigForm").addEventListener(
         llm: {
           base_url: validateServiceUrl($('serviceLlmBaseUrl').value, '问答模型 API 地址'),
           model: $('serviceLlmModel').value.trim(),
+          supports_images: $('serviceLlmImages').checked === true,
           api_key: $('serviceLlmKey').value.trim(),
         },
         embedding: {

@@ -1,0 +1,66 @@
+{
+  "version": "musique-public-sufficiency-v1",
+  "gold_sha256": "2029fdfc33d18d3bda32b5bc539348c62718dd4337ac5be46fc204a67f785c6b",
+  "inputs_sha256": "fcb0508583f6477dd8a8bcbccaba469019c4d11904c812daab86f629172a29a4",
+  "baseline": "qwen3-8b/direct",
+  "scores": {
+    "qwen3-8b/direct": {
+      "n": 256,
+      "counts": {
+        "negative": 128,
+        "tn": 109,
+        "positive": 128,
+        "fn_or_invalid": 79,
+        "tp": 49,
+        "fp_or_invalid": 19,
+        "false_pass": 19
+      },
+      "balanced_accuracy": 0.6171875,
+      "sufficient_recall": 0.3828125,
+      "insufficient_failure_rate": 0.1484375,
+      "observed_false_pass_rate": 0.1484375,
+      "invalid_rate": 0.0,
+      "both_sides_correct": 0.265625
+    },
+    "qwen3-8b/chain": {
+      "n": 256,
+      "counts": {
+        "negative": 128,
+        "tn": 122,
+        "positive": 128,
+        "tp": 65,
+        "fn_or_invalid": 63,
+        "invalid": 4,
+        "fp_or_invalid": 6,
+        "false_pass": 6
+      },
+      "balanced_accuracy": 0.73046875,
+      "sufficient_recall": 0.5078125,
+      "insufficient_failure_rate": 0.046875,
+      "observed_false_pass_rate": 0.046875,
+      "invalid_rate": 0.015625,
+      "both_sides_correct": 0.46875
+    }
+  },
+  "comparisons": {
+    "qwen3-8b/chain": {
+      "delta": {
+        "balanced_accuracy": 0.11328125,
+        "sufficient_recall": 0.125,
+        "insufficient_failure_rate": -0.1015625
+      },
+      "paired_bootstrap_95_accuracy_delta": [
+        0.0625,
+        0.16796875
+      ],
+      "meaningful_gain_passed": true,
+      "bootstrap": "5000 resamples of whole question pairs, seed17"
+    }
+  },
+  "provenance": {
+    "qwen3-8b": {
+      "manifest_sha256": "5dc5a3be5d66b1e2adce73f9d8fbd0b70ee0766ccdfa74da550c9e4dce6649e2",
+      "predictions_sha256": "46862073a09d4816450c50c8140cb3b2b2b272c373354e6a3c1a492caa4440a2"
+    }
+  }
+}

@@ -49,6 +49,8 @@ class KnowledgeService:
         self._indexes = OrderedDict()
         self._building = set()
         self._failures = {}
+        from research_assistant.knowledge.visual_evidence import VisualEvidenceRepository
+        self.visuals = VisualEvidenceRepository(store)
 
     def get_index(self, allowed_sources=None, *, background=False):
         # Cheap probe first: avoids loading every page text just to detect "nothing changed".
@@ -149,6 +151,15 @@ class KnowledgeService:
         count = data.get("k", 8)
         if type(count) is not int or not 1 <= count <= 20:
             raise ValueError("结果数应为 1–20。")
+        text_only = data.get("text_only", False)
+        if type(text_only) is not bool:
+            raise ValueError("文字检索选项必须是布尔值。")
+        multimodal = data.get("multimodal", False)
+        if type(multimodal) is not bool or (multimodal and (text_only or scope == "notes")):
+            raise ValueError("图文证据仅适用于原文且不能同时只检索文字。")
+        retrieval_mode = data.get("retrieval_mode", "legacy")
+        if retrieval_mode not in {"legacy", "hybrid"} or (retrieval_mode == "hybrid" and not (text_only or multimodal)):
+            raise ValueError("混合检索仅支持文字证据。")
         source_ids = data.get("source_ids")
         if source_ids is not None:
             if (not isinstance(source_ids, list) or not source_ids or len(source_ids) > 4
@@ -202,10 +213,23 @@ class KnowledgeService:
             with self.lock:
                 index = self.get_index(set(sources), background=True)
                 if index is not None:
-                    hits = index.search_results(query, sources=list(sources), k=count)
+                    hits = index.search_results(query, sources=list(sources), k=count,
+                                                **({"text_only": True} if text_only or (multimodal and retrieval_mode == "hybrid") else {}),
+                                                **({"retrieval_mode": retrieval_mode} if retrieval_mode != "legacy" else {}))
+                    if multimodal and retrieval_mode == "hybrid" and index.unified_index is not None:
+                        try:
+                            visual_hits = index.unified_index.search(query, k=20, min_score=0.35,
+                                sources=list(sources), modality="image")
+                            hits += index.materialize_unified_results(visual_hits, k=8, min_score=0.35)
+                        except Exception:
+                            warnings.append("视觉召回不可用；保留文字证据，不计为已完成图像检索。")
                     if index.unified_error:
                         warnings.append("语义检索不可用，当前使用关键词检索。")
                     effective = "tfidf" if index.unified_error else self.backend
+                    if retrieval_mode == "hybrid":
+                        effective = hits[0].backend if hits else ("multimodal-hybrid" if index.unified_index is not None else "bm25-lexical")
+                        if effective == "bm25-lexical-fallback":
+                            warnings.append("本次混合检索仅完成 BM25 词面召回；未计为已完成向量召回。")
                     for hit in hits:
                         meta = sources.get(hit.source)
                         if not meta:
@@ -228,6 +252,36 @@ class KnowledgeService:
                                         "modality": hit.modality,
                                         "content_type": hit.content_type,
                                         "source_id": hit.source})
+                        if getattr(hit, "ranking", None):
+                            results[-1]["ranking"] = hit.ranking
+                        if multimodal and hit.modality == "image":
+                            results[-1]["visual_caption"] = hit.visual_caption or ""
+                            results[-1]["_image_path"] = hit.image_path
+                            identity = index.unified_index.store.active_visual_identity(hit.evidence_id) if index.unified_index else None
+                            results[-1]["_visual_identity"] = identity
+        if multimodal:
+            catalog = self.visuals.catalog(data.get("kb_ids"))
+            versions = {asset["source_id"]: asset["document_version"] for asset in catalog}
+            for result in results:
+                if result["source_id"] in versions:
+                    result["document_version"] = versions[result["source_id"]]
+                if result.get("modality") != "image":
+                    continue
+                # Identity must match source, location and canonical index image.
+                candidates = [asset for asset in catalog if asset["source_id"] == result["source_id"]
+                              and asset["page"] == result["page"] and asset["bbox"] == result["bbox"]
+                              and self.visuals.matches_path(asset, result.get("_image_path"))
+                              and self.visuals.matches_identity(asset, result.get("_visual_identity"))]
+                if len(candidates) == 1:
+                    result["visual_asset"] = self.visuals.public(candidates[0])
+                result.pop("_image_path", None)
+                result.pop("_visual_identity", None)
+            results = [r for r in results if r.get("modality") != "image" or r.get("visual_asset")]
+            # Reserve at most two slots for pixels and honour the public k bound.
+            visuals = [r for r in results if r.get("modality") == "image"][:min(2, count)]
+            results = [r for r in results if r.get("modality") != "image"][:count - len(visuals)] + visuals
+            from research_assistant.retrieval.evidence_groups import attach_evidence_groups
+            attach_evidence_groups(results)
         self.store.assert_current(snapshot)
         return {"query": query, "scope": scope, "backend": effective, "warning": " ".join(warnings) or None,
                 "results": results, "revisions": {b["id"]: b["revision"] for b in snapshot["bases"]}}

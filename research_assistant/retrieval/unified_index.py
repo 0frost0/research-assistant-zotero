@@ -404,7 +404,10 @@ class UnifiedMultimodalIndex:
         sources: list[str] | None = None,
         file_types: list[str] | None = None,
         query_image: Path | None = None,
+        modality: str | None = None,
     ) -> list[UnifiedSearchHit]:
+        if modality not in {None, "text", "image"}:
+            raise ValueError("Unsupported search modality")
         if sources == [] or file_types == []:
             return []
         vector = (self.embeddings.embed_query(query, image_path=query_image)
@@ -423,6 +426,8 @@ class UnifiedMultimodalIndex:
             must.append(
                 models.FieldCondition(key="source", match=models.MatchAny(any=sources))
             )
+        if modality:
+            must.append(models.FieldCondition(key="modality", match=models.MatchValue(value=modality)))
         if file_types:
             normalized = [
                 item.lower() if item.startswith(".") else f".{item.lower()}"

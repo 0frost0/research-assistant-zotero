@@ -15,6 +15,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from research_assistant.ingestion.pdf_extractor import PDFExtractor
 from research_assistant.ingestion.mineru_extractor import MinerUExtractionError, MinerUExtractor
 from research_assistant.retrieval.retrieval_policy import CANDIDATE_K, EvidenceContext, select_evidence
+from research_assistant.retrieval.query_intent import QUERY_ALIASES
 
 
 SUPPORTED_SUFFIXES = {".pdf", ".md", ".txt"}
@@ -25,12 +26,6 @@ DEFAULT_THRESHOLDS = {
     "hybrid": 0.18,
     "qdrant": 0.35,
     "multimodal": 0.35,
-}
-QUERY_ALIASES = {
-    "心衰": "heart failure hf",
-    "心力衰竭": "heart failure hf",
-    "痴呆": "dementia",
-    "阿尔茨海默": "alzheimer dementia",
 }
 
 
@@ -48,6 +43,7 @@ class SearchResult:
     content_type: str = "text"
     bbox: object | None = None
     image_path: str | None = None
+    visual_caption: str | None = None
     modality: str = "text"
     text_score: float | None = None
     visual_score: float | None = None
@@ -56,6 +52,7 @@ class SearchResult:
     quality_warnings: list[str] = field(default_factory=list)
     retrieval_policy: str | None = None
     context_evidence_ids: list[str] = field(default_factory=list)
+    ranking: dict = field(default_factory=dict)
 
     def model_dump(self) -> dict:
         return asdict(self)
@@ -108,6 +105,7 @@ class LiteratureIndex:
         self.persistent_error: str | None = None
         self.unified_index = None
         self.unified_error: str | None = None
+        self.lexical_index = None
 
         if backend in {"tfidf", "hybrid"}:
             # 字符 n-gram 对中英文和技术缩写都适用，不依赖在线模型。
@@ -350,6 +348,8 @@ class LiteratureIndex:
         min_score: float | None = None,
         sources: list[str] | None = None,
         file_types: list[str] | None = None,
+        text_only: bool = False,
+        retrieval_mode: str = "legacy",
     ) -> list[SearchResult]:
         """检索、过滤并重排序，返回达到最低可信分数的证据。"""
         query = query.strip()
@@ -360,6 +360,12 @@ class LiteratureIndex:
         threshold = DEFAULT_THRESHOLDS[self.backend] if min_score is None else min_score
         if threshold < 0 or threshold > 1:
             raise ValueError("最低相关度必须在 0 到 1 之间")
+        if retrieval_mode not in {"legacy", "hybrid"}:
+            raise ValueError("Unknown retrieval mode")
+        if retrieval_mode == "hybrid":
+            if not text_only:
+                raise ValueError("Hybrid retrieval is text-only")
+            return self._hybrid_search_results(query, k=k, sources=sources, file_types=file_types)
 
         if self.backend == "multimodal" and self.unified_index is not None:
             return self._unified_search_results(
@@ -368,6 +374,7 @@ class LiteratureIndex:
                 min_score=threshold,
                 sources=sources,
                 file_types=file_types,
+                text_only=text_only,
             )
 
         if self.backend == "qdrant" and self.persistent_index is not None:
@@ -489,6 +496,7 @@ class LiteratureIndex:
                     bbox=hit.bbox,
                     image_path=hit.image_path,
                     modality="text",
+                    visual_caption=None,
                     text_score=round(hit.score, 4),
                 )
             )
@@ -504,6 +512,7 @@ class LiteratureIndex:
         min_score: float,
         sources: list[str] | None,
         file_types: list[str] | None,
+        text_only: bool = False,
     ) -> list[SearchResult]:
         """Search text and image points once in the unified Qwen embedding space."""
         hits = self.unified_index.search(
@@ -512,10 +521,45 @@ class LiteratureIndex:
             min_score=min_score,
             sources=sources,
             file_types=file_types,
+            **({"modality": "text"} if text_only else {}),
         )
         return self.materialize_unified_results(hits, k=k, min_score=min_score)
 
-    def materialize_unified_results(self, hits, *, k, min_score):
+    def _hybrid_search_results(self, query, *, k, sources, file_types):
+        from research_assistant.retrieval.hybrid_retrieval import BM25Index, reciprocal_rank_fusion
+        import hashlib
+
+        if self.lexical_index is None:
+            if self.unified_index is not None:
+                records = self.unified_index.store.active_text_records()
+            else:
+                records = [{"point_id": hashlib.sha256((str(i) + c.page_content +
+                            str(c.metadata)).encode()).hexdigest(), "modality": "text",
+                            "source": c.metadata["source"], "file_type": c.metadata.get("file_type", ""),
+                            "page": c.metadata.get("page"), "text": c.page_content,
+                            "chunk_index": i, "content_type": c.metadata.get("content_type", "text"),
+                            "bbox": c.metadata.get("bbox"), "image_path": c.metadata.get("image_path")}
+                           for i, c in enumerate(self.chunks)]
+            self.lexical_index = BM25Index(records)
+        expanded = self._expanded_query(query)
+        lexical = self.lexical_index.search(expanded, k=CANDIDATE_K, sources=sources, file_types=file_types)
+        dense = []
+        dense_status = "not_available"
+        if self.unified_index is not None:
+            try:
+                dense = self.unified_index.search(expanded, k=CANDIDATE_K, min_score=0,
+                                                 sources=sources, file_types=file_types, modality="text")[:CANDIDATE_K]
+                dense_status = "succeeded"
+            except Exception:
+                dense_status = "fallback"
+        fused = reciprocal_rank_fusion(dense, lexical, limit=2 * CANDIDATE_K)
+        for h in fused:
+            h["ranking"].update(dense_status=dense_status, dense_candidates=len(dense),
+                                lexical_candidates=len(lexical))
+        return self.materialize_unified_results(fused, k=k, min_score=0,
+            backend_label="multimodal-hybrid" if dense_status == "succeeded" else "bm25-lexical-fallback")
+
+    def materialize_unified_results(self, hits, *, k, min_score, backend_label="multimodal-unified"):
         """Materialize existing candidates without a second model or query call."""
         selected = select_evidence(hits, min_score, limit=k, context=self.evidence_context)
         results: list[SearchResult] = []
@@ -526,13 +570,14 @@ class LiteratureIndex:
                     page=hit["page"],
                     quote=hit["text"],
                     score=round(hit["score"], 4),
-                    backend="multimodal-unified",
+                    backend=backend_label,
                     chunk_id=hit["chunk_index"],
                     evidence_id=hit["point_id"],
                     content_type=hit["content_type"],
                     bbox=hit["bbox"],
                     image_path=hit["image_path"],
                     modality=hit["modality"],
+                    visual_caption=hit.get("retrieved_text") if hit["modality"] == "image" else None,
                     text_score=round(hit["score"], 4)
                     if hit["modality"] == "text"
                     else None,
@@ -544,6 +589,7 @@ class LiteratureIndex:
                     quality_warnings=hit["quality_warnings"],
                     retrieval_policy=hit["retrieval_policy"],
                     context_evidence_ids=hit["context_evidence_ids"],
+                    ranking=hit.get("ranking", {}),
                 )
             )
         return results

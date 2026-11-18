@@ -103,7 +103,8 @@ def select_evidence(ranking, threshold, *, limit=10, context=None):
                 ids.append(hit["point_id"])
             continue
         if len(result) < limit:
-            item = {**hit, "retrieved_text": original, "text": quote,
+            item = {**hit, "retrieved_text": original, "visual_caption": original if visual else None,
+                    "text": quote,
                     "context_span": span, "quality_warnings": warnings,
                     "context_evidence_ids": [hit["point_id"]], "retrieval_policy": POLICY_VERSION}
             seen[key] = item

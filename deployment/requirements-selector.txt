@@ -1,0 +1,4 @@
+# Isolated selector environment; reuses project GPU torch 2.10.0+cu130 and
+# transformers 4.57.6 read-only, NEVER install into the production .gpu_env.
+peft==0.17.1
+accelerate==1.10.1

@@ -1,0 +1,31 @@
+{
+  "boundary": "Synthetic retrieval-only workflow check; not real-world QA accuracy",
+  "dataset_id": "personal-memory-smoke-v1",
+  "dataset_sha256": "bd4d4d51c8739574f50291323237417d22ea8268db70072920ac82d3cb4f175c",
+  "split": "test",
+  "backend": "tfidf",
+  "summary": {
+    "recall_at_6": {
+      "mean": 1.0,
+      "n": 2
+    },
+    "mrr_at_6": {
+      "mean": 1.0,
+      "n": 2
+    },
+    "revision_accuracy": {
+      "mean": 1.0,
+      "n": 2
+    },
+    "source_link_rate": {
+      "mean": 1.0,
+      "n": 2
+    },
+    "false_answer": {
+      "mean": 0,
+      "n": 2
+    },
+    "median_elapsed_ms": 8.0
+  },
+  "cases": 4
+}

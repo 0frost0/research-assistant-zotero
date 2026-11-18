@@ -54,7 +54,8 @@ class ScriptedModel:
 
 def answer(payload):
     evidence = payload["evidence"][0]
-    return {"claims": [{"text": "该研究未发现小样本队列中的生存获益。", "citations": [
+    return {**({"question_relevant": True} if payload.get("memory_mode") else {}),
+            "claims": [{"text": "该研究未发现小样本队列中的生存获益。", "citations": [
         {"evidence_id": evidence["evidence_id"], "quote": evidence["quote"]}]}]}
 
 
@@ -95,6 +96,37 @@ class EvidenceQATests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item["role"] for item in metrics["qa_observability"]["calls"]],
                          ["answer", "review"])
         self.assertTrue(metrics["qa_observability"]["stages"])
+
+    async def test_experimental_sufficiency_gate_retrieves_once_before_answer(self):
+        second = hit("The method improved survival only in the small cohort under the stated treatment condition.")
+        service = Service(self.store, [[hit()], [second]])
+
+        def gate(payload):
+            if len(service.calls) == 1:
+                return {"sufficient": False, "evidence_ids": [payload["evidence"][0]["evidence_id"]],
+                        "gaps": ["treatment condition is missing"], "followup_query": "treatment condition survival"}
+            return {"sufficient": True, "evidence_ids": [item["evidence_id"] for item in payload["evidence"]],
+                    "gaps": [], "followup_query": ""}
+
+        model = ScriptedModel([gate, gate, answer, SUPPORT])
+        result = await EvidenceQA(service, model, configured=lambda: True).ask({**self.data,
+            "strategy": "adaptive", "sufficiency_gate": True})
+        self.assertEqual(result["status"], "answered")
+        self.assertEqual(model.calls, ["sufficiency", "sufficiency", "answer", "review"])
+        self.assertEqual(result["trace"]["sufficiency_calls"], 2)
+        self.assertEqual(result["trace"]["supplementary_retrievals"], 1)
+        self.assertEqual(len([step for step in result["trace"]["steps"] if step["stage"] == "sufficiency"]), 2)
+
+    async def test_sufficiency_gate_fails_closed_without_answer(self):
+        model = ScriptedModel([lambda payload: {"sufficient": False,
+            "evidence_ids": [payload["evidence"][0]["evidence_id"]],
+            "gaps": ["required condition is absent"], "followup_query": ""}])
+        result = await EvidenceQA(Service(self.store, [[hit()]]),
+            model, configured=lambda: True).ask({**self.data, "strategy": "selected", "sufficiency_gate": True})
+        self.assertEqual(result["status"], "no_evidence")
+        self.assertEqual(model.calls, ["sufficiency"])
+        self.assertEqual(result["claims"], [])
+        self.assertIn("required condition is absent", result["gaps"])
 
     async def test_followup_question_uses_bounded_same_session_context(self):
         service = Service(self.store, [[hit()]])
@@ -148,6 +180,33 @@ class EvidenceQATests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["claims"][0]["citations"][0]["kind"], "user_note")
         self.assertEqual(result["trace"]["model_calls"], 1)
 
+    async def test_review_rejects_coerced_decisions_without_releasing_claims(self):
+        for field, invalid in [("supported", "true"), ("supported", 1),
+                               ("question_relevant", "true"), ("question_relevant", 1),
+                               ("claim_index", True), ("claim_index", "0")]:
+            with self.subTest(field=field, invalid=invalid):
+                review = {"question_relevant": True,
+                          "verdicts": [dict(SUPPORT["verdicts"][0])]}
+                if field == "question_relevant":
+                    review[field] = invalid
+                else:
+                    review["verdicts"][0][field] = invalid
+                result = await self.qa([answer, review]).ask({**self.data, "strategy": "fixed"})
+                self.assertEqual(result["claims"], [])
+                self.assertNotEqual(result["status"], "answered")
+                self.assertEqual(self.model.calls, ["answer", "review"])
+
+    async def test_memory_rejects_coerced_scope_decision(self):
+        note = hit(kind="user_note", entity_id="n1", quote="EHR events occur at irregular intervals.")
+        for invalid in ("true", "false", 1, 0):
+            with self.subTest(invalid=invalid):
+                model = ScriptedModel([lambda payload: {**answer(payload), "question_relevant": invalid}])
+                result = await MemoryQA(Service(self.store, [[note]]), model, configured=lambda: True).ask(
+                    {**self.data, "query": "EHR事件间隔", "strategy": "fixed"})
+                self.assertEqual(result["status"], "unavailable")
+                self.assertEqual(result["claims"], [])
+                self.assertEqual(model.calls, ["answer"])
+
     async def test_personal_memory_unknown_usage_is_not_reported_as_zero(self):
         note = {"kind": "user_note", "source_id": "notes/n1-1.md", "entity_id": "n1",
                 "revision": 1, "title": "我的理解", "page": None,
@@ -156,6 +215,32 @@ class EvidenceQATests(unittest.IsolatedAsyncioTestCase):
         model = ScriptedModel([answer], missing_usage=True)
         result = await MemoryQA(service, model, configured=lambda: True).ask(self.data)
         self.assertEqual(result["trace"]["unknown_usage_calls"], 1)
+
+    async def test_related_record_cannot_answer_definition_even_with_exact_quote(self):
+        note = hit(kind="external_annotation", entity_id="n1",
+                   quote="EHR events occur at irregular intervals.")
+        def unrelated(payload):
+            return {**answer(payload), "question_relevant": False,
+                    "gaps": ["记录未给出概念定义。"]}
+        model = ScriptedModel([unrelated])
+        result = await MemoryQA(Service(self.store, [[note]]), model, configured=lambda: True).ask(
+            {**self.data, "query": "什么是EHR", "strategy": "fixed"})
+        self.assertEqual(result["status"], "no_evidence")
+        self.assertEqual(result["claims"], [])
+        self.assertFalse(result["trace"]["question_relevant"])
+        self.assertEqual(model.calls, ["answer"])
+
+    async def test_memory_scope_decision_is_required_and_gaps_mean_partial(self):
+        note = hit(kind="user_note", entity_id="n1", quote="EHR events occur at irregular intervals.")
+        for decision, expected in [(None, "unavailable"), (True, "partial")]:
+            def draft(payload):
+                value = {**answer(payload), "gaps": ["部分细节未记录。"]}
+                if decision is None:
+                    value.pop("question_relevant")
+                return value
+            result = await MemoryQA(Service(self.store, [[note]]), ScriptedModel([draft]),
+                                    configured=lambda: True).ask({**self.data, "query": "EHR事件间隔"})
+            self.assertEqual(result["status"], expected)
 
     def test_note_candidate_selector_excludes_paper_facts(self):
         self.assertEqual(select_note_candidates([hit()]), [])
@@ -241,6 +326,22 @@ class EvidenceQATests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["trace"]["retrieval_calls"], 2)
         self.assertEqual(result["trace"]["rewrite_rounds"], 1)
         self.assertTrue(any("受限问题改写" in warning for warning in result["warnings"]))
+        self.assertEqual([s["stage"] for s in result["trace"]["steps"]],
+                         ["retrieve", "memory_rewrite", "retrieve"])
+        self.assertEqual(result["revisions"], {self.base["id"]: self.store.base(self.base["id"])["revision"]})
+        self.assertIsInstance(result["trace"]["elapsed_ms"], int)
+        self.assertIn("model", result["trace"])
+        self.assertIn("retrieval_backend", result["trace"])
+
+    async def test_fixed_personal_memory_never_rewrites_an_unrelated_note(self):
+        note = hit(kind="user_note", entity_id="n1", quote="Longitudinal EHR events have irregular intervals.")
+        service = Service(self.store, [[note]])
+        model = ScriptedModel([])
+        result = await MemoryQA(service, model, configured=lambda: True).ask(
+            {**self.data, "query": "量子计算的实验误差是什么？", "strategy": "fixed"})
+        self.assertEqual(result["status"], "no_evidence")
+        self.assertEqual(model.calls, [])
+        self.assertEqual(len(service.calls), 1)
 
     async def test_combined_qa_keeps_original_and_personal_record_sections_separate(self):
         class Stub:
@@ -434,6 +535,28 @@ class EvidenceQATests(unittest.IsolatedAsyncioTestCase):
                 await ModelCaller()('review', {'claims': []}, 45)
         self.assertFalse(build.call_args.kwargs['disable_thinking'])
         self.assertEqual(build.call_args.kwargs['reasoning_effort'], 'low')
+
+    async def test_deepseek_uses_json_and_keeps_safe_parse_failure_diagnostics(self):
+        from research_assistant.knowledge.qa import ModelCaller
+        model = Mock()
+        raw = Mock(usage_metadata={"input_tokens": 10, "output_tokens": 5},
+                   response_metadata={"finish_reason": "tool_calls"},
+                   invalid_tool_calls=[{"args": "private malformed response"}])
+        model.with_structured_output.return_value.ainvoke = AsyncMock(
+            return_value={"parsed": None, "raw": raw, "parsing_error": None})
+        with patch('research_assistant.core.service_context.llm_config', return_value={
+                'model': 'deepseek-flash', 'base_url': 'https://api.deepseek.com'}):
+            with patch('research_assistant.agents.research_agent.build_chat_model', return_value=model):
+                value, usage = await ModelCaller()('answer', {}, 45)
+        self.assertIsNone(value)
+        self.assertEqual(model.with_structured_output.call_args.kwargs['method'], 'json_mode')
+        self.assertEqual(usage['parse_failure'], 'invalid_tool_arguments')
+        self.assertNotIn('private', json.dumps(usage))
+
+    async def test_invalid_output_call_is_not_mislabeled_as_transport_error(self):
+        result = await self.qa([None]).ask(self.data)
+        self.assertEqual(result['status'], 'unavailable')
+        self.assertEqual(result['trace']['calls'][0]['status'], 'invalid_output')
 
     async def test_review_uses_configured_role_and_recovers_length_usage(self):
         from research_assistant.knowledge.qa import ModelCaller

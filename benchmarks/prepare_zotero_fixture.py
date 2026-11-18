@@ -12,6 +12,10 @@ root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
 parser.add_argument("--target", type=Path, default=root / "output/zotero/native-fixture")
 parser.add_argument("--no-install-pointer", action="store_true")
+parser.add_argument("--fixture-port", type=int, default=8771)
+parser.add_argument("--qa-timeout", type=int, default=30)
+parser.add_argument("--visual-fixture", action="store_true")
+parser.add_argument("--sufficiency-fixture", action="store_true")
 args = parser.parse_args()
 target = args.target.resolve()
 target.mkdir(parents=True, exist_ok=False)
@@ -45,9 +49,17 @@ prefs = {
 }
 (profile / "user.js").write_text("\n".join("user_pref(" + json.dumps(k) + ", " + json.dumps(v) + ");"
                                          for k, v in prefs.items()), encoding="utf-8")
-pdf(target / "synthetic.pdf")
+if args.visual_fixture:
+    from benchmarks.visual_fixture import write_visual_pdf
+    write_visual_pdf(target / "synthetic.pdf")
+else:
+    pdf(target / "synthetic.pdf")
 fixture = (root / "benchmarks/zotero_native_fixture.js").read_text(encoding="utf-8")
 fixture = fixture.replace("__FIXTURE_ROOT__", json.dumps(str(target.resolve())))
+fixture = fixture.replace("__FIXTURE_PORT__", str(args.fixture_port))
+fixture = fixture.replace("__QA_WAIT_ATTEMPTS__", str(args.qa_timeout * 10))
+fixture = fixture.replace("__VISUAL_FIXTURE__", str(args.visual_fixture).lower())
+fixture = fixture.replace("__SUFFICIENCY_FIXTURE__", str(args.sufficiency_fixture).lower())
 (plugin / "fixture.js").write_text(fixture, encoding="utf-8")
 bootstrap = (plugin / "bootstrap.js").read_text(encoding="utf-8")
 bootstrap = bootstrap.replace(
