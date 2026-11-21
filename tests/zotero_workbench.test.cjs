@@ -46,6 +46,23 @@ function snapshot(notes = []) {
   ], notes};
 }
 
+test('reopening a rated answer shows its persisted rating without another feedback action', async () => {
+  const f = await fixture();
+  const job = {job_id: 'rated', state: 'succeeded', question: 'EHR?'};
+  f.bridge.request = async path => {
+    if (path === 'jobs') return {jobs: [job]};
+    assert.equal(path, 'jobs/rated');
+    return {...job, result: {status: 'answered', trace: {steps: []}}, feedback: {rating: 'partial'}};
+  };
+  await f.context.renderQAHistory();
+  const results = f.elements.get('results');
+  const row = results.children[0].children.find(el => el.dataset.jobId === 'rated');
+  await row.children.find(el => el.textContent === '打开结果').handlers.click();
+  const feedback = results.children[0].children.find(el => el.className === 'qa-feedback');
+  assert.equal(feedback.dataset.saved, 'true');
+  assert.deepEqual(feedback.children.map(el => el.textContent), ['已保存反馈 · 部分有帮助']);
+});
+
 test('visual observations are labeled, scoped and cannot be saved as source-quote AI drafts', async () => {
   const f = await fixture();
   vm.runInContext("selected.add('one')", f.context);
