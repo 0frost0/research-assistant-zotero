@@ -620,10 +620,14 @@ async function runSearch(event) {
 $("cancelAskButton").addEventListener("click", async () => {
   const job = window.__activeAskJobId;
   if (!job) return;
+  const generation = searchEpoch;
   $("cancelAskButton").disabled = true;
   try {
     await bridge.request("jobs/" + encodeURIComponent(job), {action: "cancel"}, "POST");
+    if (generation !== searchEpoch) return;
     searchEpoch++;
+    $("resultMeta").textContent = "问答已停止";
+    $("results").replaceChildren(node("p", "可在问答历史中查看已停止的任务。", "empty"));
     notice("已停止问答；已经发送的模型请求可能仍计费。历史中会保留 cancelled 状态。 ");
   } catch (error) {
     $("cancelAskButton").disabled = false;
@@ -651,6 +655,7 @@ async function renderQAHistory() {
     }
     for (const job of jobs) {
       const row = node("div", "", "history-row");
+      row.dataset.jobId = job.job_id;
       row.append(
         node("p", job.question || "未记录问题"),
         node("p", `${labels[job.state] || job.state} · ${job.updated_at || job.created_at || ""}`, "muted")
@@ -665,7 +670,7 @@ async function renderQAHistory() {
             const detail = await bridge.request("jobs/" + encodeURIComponent(job.job_id), undefined, "GET");
             if (!detail.result) throw new Error("该任务没有可恢复的回答结果。 ");
             $("results").replaceChildren();
-            renderAnswer(detail.result, detail.job_id);
+            renderAnswer(detail.result, detail.job_id, detail.feedback);
             showView("results");
             notice("已恢复历史回答。 ");
           } catch (error) {
@@ -731,16 +736,20 @@ function appendVisualEvidence(container, cite) {
   container.append(button);
 }
 
-function renderAnswer(result, jobId = null) {
+function renderAnswer(result, jobId = null, savedFeedback = null) {
   const statuses = { answered: "已生成有据回答", partial: "仅能回答部分问题", no_evidence: "现有证据不足",
     model_unavailable: "请配置回答模型", unavailable: "服务暂不可用", timeout: "已超时停止", indexing: "语义索引准备中" };
   const panel = node("article", "", "answer-panel");
   panel.append(node("h3", statuses[result.status] || result.status));
   if (jobId) {
     const feedback = node("div", "", "qa-feedback");
+    const ratings = {helpful: "有帮助", partial: "部分有帮助", incorrect: "不可靠", correct_no_answer: "正确拒答"};
+    const showSaved = rating => {
+      feedback.dataset.saved = "true";
+      feedback.replaceChildren(node("p", "已保存反馈 · " + (ratings[rating] || rating), "muted"));
+    };
     feedback.append(node("p", "可选反馈：只用于后续评测候选，不会修改笔记或自动生成标准答案。", "muted"));
-    for (const [rating, label] of [["helpful", "有帮助"], ["partial", "部分有帮助"],
-                                   ["incorrect", "不可靠"], ["correct_no_answer", "正确拒答"]]) {
+    for (const [rating, label] of Object.entries(ratings)) {
       const button = node("button", label, "source-button");
       button.type = "button";
       button.dataset.rating = rating;
@@ -748,8 +757,7 @@ function renderAnswer(result, jobId = null) {
         [...feedback.querySelectorAll("button")].forEach(item => { item.disabled = true; });
         try {
           await bridge.request("jobs/" + encodeURIComponent(jobId), {action: "feedback", rating}, "POST");
-          feedback.dataset.saved = "true";
-          feedback.replaceChildren(node("p", "反馈已保存为评测候选，不会改变个人笔记。", "muted"));
+          showSaved(rating);
         } catch (error) {
           [...feedback.querySelectorAll("button")].forEach(item => { item.disabled = false; });
           notice(error.message);
@@ -757,6 +765,7 @@ function renderAnswer(result, jobId = null) {
       });
       feedback.append(button);
     }
+    if (savedFeedback) showSaved(savedFeedback.rating);
     panel.append(feedback);
   }
   const sections = result.sections || [{scope: result.scope || "original", label: "回答", result}];
