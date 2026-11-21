@@ -28,7 +28,25 @@
 - 真实库验收使用隔离的 SQLite、对象目录、Zotero profile 和回环服务；没有改写正式 Zotero 资料。
 - 当前 Go API 会拒绝尚未移植的视觉证据和 sufficiency 选项，不把它们静默降级成文字回答。
 - 2026-11-19 真实 Zotero 对照：`output/zotero/real-comparison-go-release-20261119/`，MOTOR/RePrompT 原生勾选后点击对照，一次请求、4 次模型调用、单轮 AI 复核，状态 `ok`；两篇分析、两个条件摘要、5 条比较，9 段证据全部匹配原页，5 条比较均引用两篇来源。该审计不等于人工语义评估。
-- 生产仍使用 `hybrid_rerank`。检索职责完整迁移、网页接口对齐和开发启动整合仍待完成。
+- 生产仍使用 `hybrid_rerank`。检索职责完整迁移和网页接口对齐仍待完成。
+
+## 本地 Go 引擎开发入口（2026-11-21）
+
+在仓库根目录构建开发版。下列路径独立于归档的 release EXE。
+
+```powershell
+go -C backend build -o ../output/zotero/dev/researchd.exe ./cmd/researchd
+```
+
+Zotero 的「本机启动设置」可沿用项目 Python 解释器与工作目录，把启动脚本选为 `scripts/start_go_engine.py`。脚本使用工作目录下的知识库和连接令牌。命令行可用 `--root <隔离数据目录> --port <端口>` 指定测试实例。同一个数据目录仅运行一个引擎。日常 Python 入口仍为 `scripts/start_local_engine.py`。
+
+Python 启动器先在随机回环端口启动私有推理服务，再拉起 Go API。临时 worker 令牌经标准输入管道传给 Go；启动器退出时管道关闭，Go 随之停止。修复了 Go 在监听端口前就打开任务库的顺序问题：重复启动占用同一端口时，已用独立库验证原 running 任务状态得到保留。
+
+**复现**：用含 worker 依赖的 Python 执行上面的 `prepare_real_zotero_run.py` 准备命令，追加 `--native-engine` 并选用新目录，再运行 `run_real_zotero_questions.ps1 -Target <目录>`。桌面 8765 端口需空闲，有效库需含已确认的笔记。此模式通过原生插件保存启动设置、调用启动入口、发起笔记检索，再调用退出时使用的进程停止操作；依赖服务和 SSH 隧道单独准备。
+
+**故障与结果**：首轮把索引准备中当作空结果。补上等待后，第二轮仍收到 `unavailable`；调用栈定位到查询向量请求，本地 30001 无监听。接通既有 Qwen 隧道后，同一 EHR 笔记问题命中 1 条。随后修复仅笔记检索的查询期编码故障，按相同来源和 revision 使用字符 2–4 gram TF-IDF，API 返回实际后端并显示降级提示。第四轮该自然语言问题离线仍为 0 条；第五轮确认相同问题返回 0 条、按笔记正文检索命中原 revision，且停止后 Go API 断开。隔离记录保存在 `output/zotero/real-engine-managed-20261121*`。上述结果只覆盖这份库和这些查询。
+
+第六轮接通 Qwen 复验，API 报告 `multimodal`，自然语言问题命中 1 条，正文查询命中目标 revision，停止后 API 断开。两种连接状态的检索均未调用回答模型。
 
 ## 2026-11-21 原生问答历史验收
 

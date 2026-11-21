@@ -8,11 +8,14 @@ param(
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path "$PSScriptRoot\..").Path
 $targetPath = (Resolve-Path (Join-Path $root $Target)).Path
+$nativeEngine = (Get-Content -Raw -Encoding UTF8 "$targetPath/run-config.json" | ConvertFrom-Json).native_engine
+if ($nativeEngine -and $GoBackend) { throw "Native engine mode starts its own Go backend" }
 if (Test-Path (Join-Path $targetPath "result.json")) { throw "Refusing completed or partial run directory; prepare a new target" }
 $server = $null
 $zotero = $null
 $worker = $null
 try {
+  if ($nativeEngine) { $Port = 8765 }
   $ports = @($Port, $DebuggerPort)
   if ($GoBackend) { $ports += 8778 }
   foreach ($p in $ports) {
@@ -22,11 +25,12 @@ try {
     & $Python -c "import secrets,pathlib; pathlib.Path(r'$targetPath/worker-token').write_text(secrets.token_urlsafe(32))"
     $worker = Start-Process $Python -ArgumentList @("-X", "utf8", "-m", "research_assistant.web.inference_worker", "--root", "$Target/backend", "--token-file", "$Target/worker-token") -WorkingDirectory $root -PassThru -WindowStyle Hidden -RedirectStandardOutput "$targetPath/worker.log" -RedirectStandardError "$targetPath/worker.err.log"
     $server = Start-Process "$root/output/zotero/researchd.exe" -ArgumentList @("-root", "$Target/backend", "-worker-token-file", "$Target/worker-token", "-listen", "127.0.0.1:$Port") -WorkingDirectory $root -PassThru -WindowStyle Hidden -RedirectStandardOutput "$targetPath/server.log" -RedirectStandardError "$targetPath/server.err.log"
-  } else {
+  } elseif (-not $nativeEngine) {
     $server = Start-Process $Python -ArgumentList @("-X", "utf8", "scripts/serve_knowledge.py", "--root", "$Target/backend", "--port", $Port) -WorkingDirectory $root -PassThru -WindowStyle Hidden -RedirectStandardOutput "$targetPath/server.log" -RedirectStandardError "$targetPath/server.err.log"
   }
   $zotero = Start-Process "C:\Program Files\Zotero\zotero.exe" -ArgumentList @("-no-remote", "-profile", "$targetPath/profile", "-start-debugger-server", $DebuggerPort) -PassThru
   foreach ($p in $ports) {
+    if ($nativeEngine -and $p -eq $Port) { continue }
     $ready = $false
     for ($i=0; $i -lt 120; $i++) {
       $client = [Net.Sockets.TcpClient]::new()

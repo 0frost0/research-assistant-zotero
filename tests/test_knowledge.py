@@ -81,6 +81,21 @@ class KnowledgeTests(unittest.TestCase):
         with self.assertRaises(KeyError):
             self.service.search({"kb_ids": ["unknown"], "query": "evidence"})
 
+    def test_query_embedding_outage_preserves_scoped_note_hits(self):
+        from research_assistant.retrieval.embeddings.api_embeddings import EmbeddingServiceUnavailable
+        self.sync(self.a, [self.doc, self.note(confirmed=True)])
+        self.sync(self.b, [self.note("NOTE0002", confirmed=True)])
+        query = {"kb_ids": [self.a["id"]], "query": "private telescope", "scope": "notes"}
+        normal = self.service.search(query)
+        self.assertTrue(normal["results"])
+        with patch.object(self.service.index, "search_results", side_effect=EmbeddingServiceUnavailable()):
+            fallback = self.service.search(query)
+            self.assertEqual(fallback["backend"], "tfidf")
+            self.assertIn("关键词检索", fallback["warning"])
+            self.assertEqual(fallback["results"], normal["results"])
+            self.assertEqual(self.service.search({**query, "query": "ZZZ999"})["results"], [])
+        self.assertEqual(self.service.search(query), normal)
+
     def test_partial_snapshot_or_missing_attachment_does_not_remove_members(self):
         self.sync(self.a, [self.doc])
         for change in ({"complete": False}, {"entities": [{**self.doc, "hash": "0" * 64}]}):

@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -21,6 +23,7 @@ func main() {
 	bind := flag.String("listen", "127.0.0.1:8776", "Loopback product address")
 	workerURL := flag.String("worker", "http://127.0.0.1:8778", "Private inference worker URL")
 	workerToken := flag.String("worker-token-file", "", "Private inference token file")
+	managed := flag.Bool("managed-stdin", false, "Read private worker token line from stdin and stop when launcher closes the pipe")
 	reranker := flag.String("reranker", "http://127.0.0.1:30002/rerank", "Project reranker URL")
 	flag.Parse()
 	host, _, err := net.SplitHostPort(*bind)
@@ -35,18 +38,41 @@ func main() {
 	if err != nil {
 		log.Fatal("connection token file unavailable")
 	}
-	internal, err := os.ReadFile(*workerToken)
+	stop, done := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer done()
+	var internal []byte
+	if *managed {
+		if *workerToken != "" {
+			log.Fatal("select only one worker token source")
+		}
+		input := bufio.NewReader(os.Stdin)
+		internal, err = input.ReadSlice('\n')
+		internal = append([]byte(nil), internal...)
+		if err == nil {
+			go func() {
+				io.Copy(io.Discard, input)
+				done()
+			}()
+		}
+	} else {
+		internal, err = os.ReadFile(*workerToken)
+	}
 	if err != nil || strings.TrimSpace(string(internal)) == "" {
 		log.Fatal("worker token file unavailable")
 	}
+	// Acquire the product port before opening job storage. Opening it marks
+	// unfinished jobs interrupted, which a second launcher must never do.
+	listener, err := net.Listen("tcp", *bind)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer listener.Close()
 	app, err := api.New(abs, strings.TrimSpace(string(token)), inference.New(*workerURL, strings.TrimSpace(string(internal))), *reranker)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer app.Close()
 	server := &http.Server{Addr: *bind, Handler: app, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16384}
-	stop, done := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer done()
 	go func() {
 		<-stop.Done()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -54,7 +80,7 @@ func main() {
 		server.Shutdown(ctx)
 	}()
 	log.Printf("Go product API listening on %s", *bind)
-	if err = server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err = server.Serve(listener); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
 }

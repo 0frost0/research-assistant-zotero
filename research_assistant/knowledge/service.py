@@ -10,6 +10,7 @@ from urllib.parse import urlencode
 
 from langchain_core.documents import Document
 from research_assistant.retrieval.knowledge_base import LiteratureIndex
+from research_assistant.retrieval.embeddings.api_embeddings import EmbeddingServiceUnavailable
 from research_assistant.knowledge.store import digest, text
 
 
@@ -26,6 +27,7 @@ def zotero_url(library, item_key, page=None):
 class CachedIndex(LiteratureIndex):
     def __init__(self, home, documents, backend, scope="all"):
         self.documents = documents
+        self.notes_fallback = None
         self.embedding_cache_path = home / "indexes" / "embedding-cache.sqlite3"
         namespace = "research_zotero_v1_" + digest(str(home.resolve()).encode())[:12]
         context = service_context.get()
@@ -213,9 +215,21 @@ class KnowledgeService:
             with self.lock:
                 index = self.get_index(set(sources), background=True)
                 if index is not None:
-                    hits = index.search_results(query, sources=list(sources), k=count,
-                                                **({"text_only": True} if text_only or (multimodal and retrieval_mode == "hybrid") else {}),
-                                                **({"retrieval_mode": retrieval_mode} if retrieval_mode != "legacy" else {}))
+                    try:
+                        hits = index.search_results(
+                            query, sources=list(sources), k=count,
+                            **({"text_only": True} if text_only or (multimodal and retrieval_mode == "hybrid") else {}),
+                            **({"retrieval_mode": retrieval_mode} if retrieval_mode != "legacy" else {}),
+                        )
+                    except EmbeddingServiceUnavailable:
+                        if scope != "notes" or retrieval_mode != "legacy":
+                            raise
+                        # Tie the lexical index to the same snapshot and allowed note revisions.
+                        if index.notes_fallback is None:
+                            index.notes_fallback = CachedIndex(self.store.home, index.documents, "tfidf")
+                        hits = index.notes_fallback.search_results(query, sources=list(sources), k=count)
+                        effective = "tfidf"
+                        warnings.append("本次笔记查询无法访问编码服务，已使用关键词检索。")
                     if multimodal and retrieval_mode == "hybrid" and index.unified_index is not None:
                         try:
                             visual_hits = index.unified_index.search(query, k=20, min_score=0.35,
@@ -225,7 +239,7 @@ class KnowledgeService:
                             warnings.append("视觉召回不可用；保留文字证据，不计为已完成图像检索。")
                     if index.unified_error:
                         warnings.append("语义检索不可用，当前使用关键词检索。")
-                    effective = "tfidf" if index.unified_error else self.backend
+                        effective = "tfidf"
                     if retrieval_mode == "hybrid":
                         effective = hits[0].backend if hits else ("multimodal-hybrid" if index.unified_index is not None else "bm25-lexical")
                         if effective == "bm25-lexical-fallback":
