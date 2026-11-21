@@ -17,6 +17,10 @@ import urllib.error
 from .remote_embeddings import query_instruction, QUERY_INSTRUCTION
 
 
+class EmbeddingServiceUnavailable(RuntimeError):
+    """Configured embedding service rejected the request or could not be reached."""
+
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
@@ -109,8 +113,10 @@ class QwenAPIEmbeddings:
             with self.opener.open(request, timeout=45) as response:
                 result = json.load(response)
         except urllib.error.HTTPError as exc:
-            raise RuntimeError(f"Embedding API HTTP {exc.code}; check authentication/model/protocol") from None
-        except (OSError, ValueError):
+            raise EmbeddingServiceUnavailable(f"Embedding API HTTP {exc.code}; check authentication/model/protocol") from None
+        except OSError:
+            raise EmbeddingServiceUnavailable("Embedding API connection failed") from None
+        except ValueError:
             raise RuntimeError("Embedding API connection or response failed") from None
         data = result.get("data") if isinstance(result, dict) else None
         if not isinstance(data, list) or len(data) != 1 or not isinstance(data[0], dict):
