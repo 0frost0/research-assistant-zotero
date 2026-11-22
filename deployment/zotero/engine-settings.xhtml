@@ -23,9 +23,9 @@ button {padding:8px 16px;font:inherit;border-radius:6px;cursor:pointer;} #save {
 <p class="hint">本机地址固定为 http://127.0.0.1:8765。连接令牌从项目目录自动读取，不需要填写；它不是模型 API 密钥。</p>
 <h2>远端 GPU 服务（Qwen / MinerU，可选）</h2>
 <label class="field" for="sshExecutable">SSH 程序路径（留空自动查找）</label><input id="sshExecutable" placeholder="C:\Windows\System32\OpenSSH\ssh.exe" />
-<label class="field" for="qwenSshHost">SSH 别名</label><input id="qwenSshHost" placeholder="research-eval" />
+<label class="field" for="qwenSshHost">SSH 别名</label><input id="qwenSshHost" placeholder="research-gpu" />
 <label class="field" for="qwenServiceUnit">systemd 服务名</label><input id="qwenServiceUnit" placeholder="research-assistant-embedding.service" />
-<p class="hint">SSH 隧道同时转发 Qwen 30001 和 MinerU 30000。当前新服务器别名为 research-eval，项目目录内服务不填 systemd 服务名。直接使用 HTTPS API 时两项留空；模型地址、型号和密钥在“服务设置”填写。</p>
+<p class="hint">SSH 隧道同时转发 Qwen 30001 和 MinerU 30000。使用本机 SSH 配置中的别名，项目目录内服务可留空 systemd 服务名。直接使用 HTTPS API 时两项留空；模型地址、型号和密钥在“服务设置”填写。</p>
 <label class="check"><input id="autoStartEngine" type="checkbox" />启动 Zotero 时自动准备服务</label>
 <label class="check"><input id="stopEngineOnExit" type="checkbox" />退出 Zotero 时停止本插件启动的 Python 后端</label>
 <footer><button id="cancel" type="button">取消</button><button id="save" type="submit">保存</button></footer>

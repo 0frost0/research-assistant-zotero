@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REPO = "0frost0/research-assistant-zotero"
 API = "https://api.github.com"
 FULL_SOURCE_VERSIONS = {"0.3.11", "0.3.12"}
+WITHDRAWN_XPI_VERSIONS = {f"0.3.{patch}" for patch in range(14)}
 NOTES = {
     "0.1.0": "初版桥接：manifest、bootstrap 与 bridge；仅归档实际留存插件。",
     "0.2.0": "分类知识库工作台、文献与笔记同步。保留已发布 research release 的原始包；local-retained 为同版本不同字节的本地留存变体。",
@@ -174,6 +175,8 @@ def publish(output):
     receipts = []
     for record in json.loads((output / "manifest.json").read_text(encoding="utf-8")):
         version = record["version"]
+        if version in WITHDRAWN_XPI_VERSIONS:
+            continue
         folder = output / version
         for name, expected in record["assets"].items():
             if sha((folder / name).read_bytes()) != expected:

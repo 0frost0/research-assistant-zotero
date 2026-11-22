@@ -2,7 +2,7 @@
 
 ## 当前交付（2026-11-18）
 
-Zotero 9/10 插件 + Python 后端：BM25／Qwen 混合检索、原文引文核验、有界补检索，以及带 revision 的个人文献记忆。当前源码版本 **0.3.12**；生产检索策略仍为 `hybrid_rerank`。本轮发布归档不自动更新正在运行的后端或正式 Zotero profile。
+Zotero 9/10 插件：BM25／Qwen 混合检索、原文引文核验、有界补检索，以及带 revision 的个人文献记忆。当前插件版本 **0.3.14**，可选用本地 Go 主后端。生产检索策略为 `hybrid_rerank`。
 
 - [插件安装与工作台](deployment/zotero/README.md) · [Go 主后端与本地验收](docs/Go主后端迁移与验收.md)
 - [版本归档及更新记录](docs/releases/README.md) · [GitHub Releases](https://github.com/0frost0/research-assistant-zotero/releases)

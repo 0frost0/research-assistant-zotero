@@ -3,75 +3,15 @@
     "research-assistant@local": {
       "updates": [
         {
-          "version": "0.3.13",
-          "update_link": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.13/research-assistant-0.3.13.xpi",
-          "update_hash": "sha256:accb84fb6a44fc478b6b2b84b32c9014547a95d86746dec51e955f37ff232f00",
-          "applications": {"zotero": {"strict_min_version": "9.0", "strict_max_version": "10.0.*"}}
-        },
-        {
-          "version": "0.3.12",
-          "update_link": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.12/research-assistant-0.3.12.xpi",
-          "applications": {"zotero": {"strict_min_version": "9.0", "strict_max_version": "10.0.*"}}
-        },
-        {
-          "version": "0.3.11",
-          "update_link": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.11/research-assistant-0.3.11.xpi",
-          "applications": {"zotero": {"strict_min_version": "9.0", "strict_max_version": "10.0.*"}}
-        },
-        {
-          "version": "0.3.10",
-          "update_link": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.10/research-assistant-0.3.10.xpi",
-          "applications": {"zotero": {"strict_min_version": "9.0", "strict_max_version": "10.0.*"}}
-        },
-        {
-          "version": "0.3.9",
-          "update_link": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.9/research-assistant-0.3.9.xpi",
-          "applications": {"zotero": {"strict_min_version": "9.0", "strict_max_version": "10.0.*"}}
-        },
-        {
-          "version": "0.3.8",
-          "update_link": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.8/research-assistant-0.3.8.xpi",
-          "applications": {"zotero": {"strict_min_version": "9.0", "strict_max_version": "10.0.*"}}
-        },
-        {
-          "version": "0.3.7",
-          "update_link": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.7/research-assistant-0.3.7.xpi",
-          "applications": {"zotero": {"strict_min_version": "9.0", "strict_max_version": "10.0.*"}}
-        },
-        {
-          "version": "0.3.6",
-          "update_link": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.6/research-assistant-0.3.6.xpi",
-          "applications": {"zotero": {"strict_min_version": "9.0", "strict_max_version": "9.*"}}
-        },
-        {
-          "version": "0.3.5",
-          "update_link": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.5/research-assistant-0.3.5.xpi",
-          "applications": {"zotero": {"strict_min_version": "9.0", "strict_max_version": "9.*"}}
-        },
-        {
-          "version": "0.3.4",
-          "update_link": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.4/research-assistant-0.3.4.xpi",
-          "applications": {"zotero": {"strict_min_version": "9.0", "strict_max_version": "9.*"}}
-        },
-        {
-          "version": "0.3.3",
-          "update_link": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.3/research-assistant-0.3.3.xpi",
-          "applications": {"zotero": {"strict_min_version": "9.0", "strict_max_version": "9.*"}}
-        },
-        {
-          "version": "0.3.2",
-          "update_link": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.2/research-assistant-0.3.2.xpi",
-          "applications": {"zotero": {"strict_min_version": "9.0", "strict_max_version": "9.*"}}
-        },
-        {
-          "version": "0.3.1",
-          "update_link": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.1/research-assistant-0.3.1.xpi",
-          "applications": {"zotero": {"strict_min_version": "9.0", "strict_max_version": "9.*"}}
-        },
-        {
-          "version": "0.3.0",
-          "update_link": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.0/research-assistant-0.3.0.xpi",
-          "applications": {"zotero": {"strict_min_version": "9.0", "strict_max_version": "9.*"}}
+          "version": "0.3.14",
+          "update_link": "https://github.com/0frost0/research-assistant-zotero/releases/download/v0.3.14/research-assistant-0.3.14.xpi",
+          "update_hash": "sha256:abcb34db618388ec076c9de610427e67035450b15e38b2466ec9213f75d837f1",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "9.0",
+              "strict_max_version": "10.0.*"
+            }
+          }
         },
         {
           "version": "0.2.0",
