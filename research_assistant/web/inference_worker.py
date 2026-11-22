@@ -32,7 +32,10 @@ def create_worker(root, token):
             operation, payload = request.path_params["operation"], data["payload"]
             with stored_service_context(root, data["connection"], allow_missing=operation == "search"):
                 if operation == "search":
-                    result = await asyncio.to_thread(service.search, payload, expected_revisions=data.get("expected_revisions"))
+                    result = await asyncio.to_thread(
+                        service.search, payload, expected_revisions=data.get("expected_revisions"),
+                        allowed_source_ids=data.get("allowed_source_ids"),
+                    )
                 elif operation == "model":
                     value, usage = await ModelCaller()(data["role"], payload, min(data.get("timeout", 45), 45))
                     result = {"value": value.model_dump() if hasattr(value, "model_dump") else value, "usage": usage}

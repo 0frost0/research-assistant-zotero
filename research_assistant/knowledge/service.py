@@ -159,7 +159,7 @@ class KnowledgeService:
                 }))
         return CachedIndex(self.store.home, documents, self.backend, scope) if documents else None
 
-    def search(self, data, *, expected_revisions=None):
+    def search(self, data, *, expected_revisions=None, allowed_source_ids=None):
         query = text(data.get("query"), "检索问题", 2000)
         scope = data.get("scope", "both")
         if scope not in {"both", "original", "notes"}:
@@ -187,19 +187,27 @@ class KnowledgeService:
         revisions = {b["id"]: b["revision"] for b in snapshot["bases"]}
         if expected_revisions is not None and revisions != expected_revisions:
             raise Conflict("检索期间资料已更新，请重新检索。")
+        allowed = None if allowed_source_ids is None else set(allowed_source_ids)
         sources = {}
         for entity in snapshot["entities"]:
             value = entity["data"]
-            if value["kind"] == "document" and scope != "notes":
-                source = value["hash"] + ".pdf"
-                if source_ids is not None and source not in source_ids:
+            is_document = value["kind"] == "document"
+            source = value["hash"] + ".pdf" if is_document else note_source(entity["id"], entity["revision"])
+            if allowed is not None:
+                if source not in allowed:
                     continue
+            elif is_document:
+                if scope == "notes" or (source_ids is not None and source not in source_ids):
+                    continue
+            elif scope == "original" or not value.get("confirmed"):
+                continue
+            if is_document:
                 sources.setdefault(source, {"kind": "original", "title": value["title"],
                                             "item_key": value["key"], "library": entity["library"],
                                             "hash": value["hash"], "entity_id": entity["id"],
                                             "revision": entity["revision"]})
-            elif value["kind"] != "document" and value.get("confirmed") and scope != "original":
-                sources[note_source(entity["id"], entity["revision"])] = {
+            else:
+                sources[source] = {
                     "kind": "external_" + value["kind"], "title": value["title"],
                     "entity_id": entity["id"], "revision": entity["revision"],
                     "item_key": value.get("attachment_key") or value["key"],
@@ -210,19 +218,25 @@ class KnowledgeService:
                     "author_source": value.get("author_source", "external_zotero"),
                     "source_status": "external_zotero",
                 }
-        if scope != "original":
-            for note in snapshot["notes"]:
-                value = note["data"]
-                if value["confirmed"] and not value["archived"]:
-                    sources[note_source(note["id"], note["revision"])] = {
-                        "kind": "user_note", "title": value["title"], "entity_id": note["id"],
-                        "revision": note["revision"], "kb_id": note["kb_id"],
-                        "anchors": value.get("anchors", []),
-                        "source_status": value.get("source_status", "unlinked"),
-                        "source_verified": bool(value.get("source_verified", False)),
-                        "author_source": value.get("author_source", "user"),
-                        "note_type": value.get("type", "understanding"),
-                    }
+        for note in snapshot["notes"]:
+            value = note["data"]
+            source = note_source(note["id"], note["revision"])
+            if allowed is not None:
+                if source not in allowed:
+                    continue
+            elif scope == "original" or not value["confirmed"] or value["archived"]:
+                continue
+            sources[source] = {
+                "kind": "user_note", "title": value["title"], "entity_id": note["id"],
+                "revision": note["revision"], "kb_id": note["kb_id"],
+                "anchors": value.get("anchors", []),
+                "source_status": value.get("source_status", "unlinked"),
+                "source_verified": bool(value.get("source_verified", False)),
+                "author_source": value.get("author_source", "user"),
+                "note_type": value.get("type", "understanding"),
+            }
+        if allowed is not None and sources.keys() != allowed:
+            raise Conflict("检索期间资料已更新，请重新检索。")
         unreadable = any(e["data"].get("extraction", {}).get("empty_pages", 0) or
                          e["data"].get("extraction", {}).get("low_text_pages", 0) for e in snapshot["entities"])
         warnings = ["部分 PDF 页面缺少足够文字；此版本未执行 OCR，检索覆盖不完整。"] if unreadable else []

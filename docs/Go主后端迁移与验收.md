@@ -1,6 +1,6 @@
 # Go 主后端迁移与验收
 
-更新：2026-11-22。Go 负责知识库工作台、产品 API、SQLite 数据、revision、任务状态、问答编排、反馈、备份和解析队列。Python worker 提供检索索引、模型调用和 PDF/OCR/MinerU。
+更新：2026-11-22。Go 负责知识库工作台、产品 API、SQLite 数据、检索版本和来源范围、任务状态、问答编排、反馈、备份和解析队列。Python worker 提供检索索引、模型调用和 PDF/OCR/MinerU。
 
 ## Go 知识库工作台
 
@@ -13,10 +13,22 @@
 
 ## 检索版本一致性
 
-- Go 在一次 SQLite 读事务中读取所选知识库的 revision，只将版本表随检索请求传给 Python worker。worker 在准备索引前核对，Go 在交付结果前再次核对 worker 返回值和当前版本。
+- Go 在一次 SQLite 读事务中读取所选知识库的 revision，并将版本表随检索请求传给 Python worker。worker 在准备索引前核对，Go 在交付结果前再次核对 worker 返回值和当前版本。
 - 直接检索仍通过 202 提示索引准备。问答和对照在服务端轮询同一次检索时沿用最初版本。资料在这次检索中变化时返回 `revision_conflict`，网页提示刷新知识库后重试。
-- Go API 契约测试覆盖检索前、检索中和索引等待时的版本冲突。Python worker 测试核对版本不符时跳过索引，版本一致时返回匹配的 revision。Python 继续负责来源选择、索引和排序。
+- Go API 契约测试覆盖检索前、检索中和索引等待时的版本冲突。Python worker 测试核对版本不符时跳过索引，版本一致时返回匹配的 revision。Python 继续负责索引和排序。
 - Zotero 10.0.8 隔离库通过 `--native-engine` 复验从插件启动、工作台访问、离线 TF-IDF 检索及引擎停止。自然语言问题命中 1 条笔记，按笔记正文查到目标 revision。实测使用真实库的隔离副本，未调用生成模型。
+
+## 检索来源范围
+
+- Go 在读取知识库 revision 的同一个 SQLite 事务中计算来源名单。PDF 按内容哈希去重，笔记按 ID 和 revision 标识。范围以 Zotero 同步写入的分类成员为准，排除未确认及已归档的个人笔记。指定 `source_ids` 时仅筛 PDF，`both` 仍可返回选中库的笔记。
+- 直接检索、问答和文献对照共用这条路径。Python worker 用名单准备索引并保留原有引用元数据与排序。名单为空时跳过索引。Go 对照名单逐条校验命中，拦截范围外结果。独立 Python 工作台继续用自身的来源范围逻辑。
+- Zotero 10.0.8 隔离实测覆盖插件启动 Go、访问工作台、编码服务断开时检索、按正文找回目标笔记 revision、退出停止引擎。复现使用下文的 `--native-engine`。来源范围和 worker 契约可用合成测试复现。
+
+  ```powershell
+  go -C backend test ./internal/store -run TestScopeForSearch -count=1
+  go -C backend test ./internal/api -run TestSearchPinsKnowledgeBaseRevisions -count=1
+  python -m unittest tests.test_inference_worker
+  ```
 
 ## 已验证
 

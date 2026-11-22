@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from starlette.testclient import TestClient
-from research_assistant.knowledge.service import KnowledgeService
+from research_assistant.knowledge.service import KnowledgeService, note_source
 from research_assistant.knowledge.store import KnowledgeStore
 from research_assistant.web.inference_worker import create_worker
 
@@ -22,7 +22,7 @@ class InferenceWorkerTests(unittest.IsolatedAsyncioTestCase):
                     response = client.post("/internal/search", json={"connection": "new", "payload": query})
                     self.assertEqual(response.status_code, 200)
                     self.assertEqual(response.json(), {"results": []})
-                    search.assert_called_once_with(query, expected_revisions=None)
+                    search.assert_called_once_with(query, expected_revisions=None, allowed_source_ids=None)
                 response = client.post("/internal/model", json={"connection": "new", "payload": {}})
                 self.assertEqual(response.status_code, 503)
                 self.assertEqual(response.json(), {"error": "ValueError"})
@@ -51,6 +51,30 @@ class InferenceWorkerTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(response.status_code, 200)
                     self.assertEqual(response.json()["revisions"], {base["id"]: current})
                     index.assert_called_once()
+
+    async def test_worker_indexes_only_the_go_source_scope(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            store = KnowledgeStore(root)
+            base = store.create({"connection": "fixture", "library": "user:0", "collection": "A", "name": "A"})
+            first = store.save_note(base["id"], {"body": "First synthetic note"})
+            store.save_note(base["id"], {"body": "Second synthetic note"})
+            current = store.save_note(base["id"], {"body": "Updated note", "expected_revision": first["revision"]}, first["id"])
+            selected = note_source(current["id"], current["revision"])
+            request = {"connection": "", "payload": {"query": "note", "kb_ids": [base["id"]], "scope": "notes"},
+                       "expected_revisions": {base["id"]: store.base(base["id"])["revision"]}}
+            with TestClient(create_worker(root, "worker-token"), headers={"Authorization": "Bearer worker-token"}) as client:
+                with patch.object(KnowledgeService, "get_index", return_value=None) as index:
+                    response = client.post("/internal/search", json={**request, "allowed_source_ids": [selected]})
+                    self.assertEqual(response.status_code, 200)
+                    index.assert_called_once_with({selected}, background=True)
+                    index.reset_mock()
+                    response = client.post("/internal/search", json={**request, "allowed_source_ids": []})
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.json()["results"], [])
+                    response = client.post("/internal/search", json={**request, "allowed_source_ids": [note_source(first["id"], first["revision"])]})
+                    self.assertEqual(response.status_code, 409)
+                    index.assert_not_called()
 
     async def test_disconnect_cancels_model_request(self):
         with tempfile.TemporaryDirectory() as root:

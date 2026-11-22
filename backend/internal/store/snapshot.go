@@ -150,14 +150,22 @@ func (s *Store) AssertCurrent(ctx context.Context, snapshot Object) error {
 
 // ActiveBaseRevisions reads the selected revisions in one transaction without loading content.
 func (s *Store) ActiveBaseRevisions(ctx context.Context, ids []string) (map[string]int64, error) {
-	if len(ids) == 0 || len(ids) > 20 {
-		return nil, ErrInvalid
-	}
 	tx, err := s.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
+	revisions, err := activeBaseRevisions(ctx, tx, ids)
+	if err != nil {
+		return nil, err
+	}
+	return revisions, tx.Commit()
+}
+
+func activeBaseRevisions(ctx context.Context, tx *sql.Tx, ids []string) (map[string]int64, error) {
+	if len(ids) == 0 || len(ids) > 20 {
+		return nil, ErrInvalid
+	}
 	revisions := make(map[string]int64, len(ids))
 	for _, id := range ids {
 		if _, seen := revisions[id]; seen {
@@ -174,7 +182,7 @@ func (s *Store) ActiveBaseRevisions(ctx context.Context, ids []string) (map[stri
 		}
 		revisions[id] = revision
 	}
-	return revisions, tx.Commit()
+	return revisions, nil
 }
 
 func (s *Store) NoteHistory(ctx context.Context, id string) ([]Object, error) {

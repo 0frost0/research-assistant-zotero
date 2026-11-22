@@ -97,6 +97,7 @@ func TestSearchPinsKnowledgeBaseRevisions(t *testing.T) {
 		var body struct {
 			Payload           Object           `json:"payload"`
 			ExpectedRevisions map[string]int64 `json:"expected_revisions"`
+			AllowedSources    []string         `json:"allowed_source_ids"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Error(err)
@@ -114,6 +115,19 @@ func TestSearchPinsKnowledgeBaseRevisions(t *testing.T) {
 			return
 		}
 		switch body.Payload["query"] {
+		case "complete":
+			if body.AllowedSources == nil || len(body.AllowedSources) != 0 {
+				t.Errorf("expected an explicit empty source list, got %#v", body.AllowedSources)
+			}
+		case "outside result", "outside indexing result":
+			response := Object{"revisions": current, "results": []Object{{"source_id": "notes/outside-1.md"}}}
+			if body.Payload["query"] == "outside indexing result" {
+				response["status"] = "indexing"
+				jsonResponse(w, 202, response)
+			} else {
+				jsonResponse(w, 200, response)
+			}
+			return
 		case "indexing":
 			jsonResponse(w, 202, Object{"status": "indexing", "results": []Object{}})
 			return
@@ -145,6 +159,8 @@ func TestSearchPinsKnowledgeBaseRevisions(t *testing.T) {
 		{"unknown library", []string{"missing"}, 404},
 		{"indexing", []string{id}, 202},
 		{"complete", []string{id, id}, 200},
+		{"outside result", []string{id}, 503},
+		{"outside indexing result", []string{id}, 503},
 		{"changed before lookup", []string{id}, 409},
 		{"wrong worker revision", []string{id}, 409},
 		{"changed during lookup", []string{id}, 409},
@@ -155,8 +171,8 @@ func TestSearchPinsKnowledgeBaseRevisions(t *testing.T) {
 		if w.Code != tc.want {
 			t.Errorf("%s: got %d, want %d (%s)", tc.query, w.Code, tc.want, w.Body.String())
 		}
-		if tc.want == 409 && strings.Contains(w.Body.String(), `"results"`) {
-			t.Errorf("%s: conflict returned results: %s", tc.query, w.Body.String())
+		if tc.want >= 400 && strings.Contains(w.Body.String(), `"results"`) {
+			t.Errorf("%s: error returned results: %s", tc.query, w.Body.String())
 		}
 	}
 	wait, cancel := context.WithTimeout(ctx, 3*time.Second)
