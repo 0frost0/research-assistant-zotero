@@ -288,5 +288,10 @@
     }
   ],
   "update_links": 13,
-  "original_research_asset_unchanged": true
+  "original_research_asset_unchanged": true,
+  "2026-11-22_public_assets": {
+    "public-experiment-receipts.zip": "3bb9dd9deacde3ec38129ec834ab1677a23c0525db97a64a8575c37c4ed2ef7c",
+    "research-assistant-0.3.11.xpi": "faa17d0186cdf9ff4ede9d5659e2e6a009572cd151271ecf0be3b186081252b6",
+    "SHA256SUMS.txt": "40480d6e0797fde87fc1f475476330e2e045e7c8b8b4defe8d5ef4576f5ca7dc"
+  }
 }

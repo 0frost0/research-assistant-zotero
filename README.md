@@ -4,7 +4,7 @@
 
 Zotero 9/10 插件 + Python 后端：BM25／Qwen 混合检索、原文引文核验、有界补检索，以及带 revision 的个人文献记忆。当前源码版本 **0.3.12**；生产检索策略仍为 `hybrid_rerank`。本轮发布归档不自动更新正在运行的后端或正式 Zotero profile。
 
-- [五分钟演示与复现](docs/演示与面试主线.md) · [简历项目经历与事实依据](docs/简历项目经历.md)
+- [插件安装与工作台](deployment/zotero/README.md) · [Go 主后端与本地验收](docs/Go主后端迁移与验收.md)
 - [版本归档及更新记录](docs/releases/README.md) · [GitHub Releases](https://github.com/0frost0/research-assistant-zotero/releases)
 - [个人文献记忆](docs/个人文献记忆交付.md) · [有据问答](docs/有据问答交付.md) · [公开充分性实验及失败边界](docs/充分性公开资源调研.md)
 
@@ -16,7 +16,7 @@ Zotero 9/10 插件 + Python 后端：BM25／Qwen 混合检索、原文引文核�
 
 本地部署链路开发中：Zotero → 本地主后端／SQLite／Qdrant → 本地或远端 MinerU → 远端 Qwen API。服务面板的问答、嵌入及 MinerU 配置已接入代码，新增后台精析任务；本轮按要求未测试、打包、启动或远端部署，实际旧服务未切换。启动方法与边界见 [本地主后端与远端 Qwen](docs/deployment/本地主后端与远端Qwen.md)。密钥保存在后端 `.data/zotero/service-config.json`，是文件权限保护的明文存储；配置分组不是独立用户认证。
 
-**2026-10-06 使用体验更新**：刷新保留正在编辑的笔记，切换编辑目标前保护未保存内容；专题笔记引用直接打开当时的版本与来源，并提示后续修订／归档。见 [五分钟演示与面试主线](docs/演示与面试主线.md)。本次定向 Node 检查 16 项通过；不以测试数量代表科研效果。
+**2026-10-06 使用体验更新**：刷新保留正在编辑的笔记，切换编辑目标前保护未保存内容；专题笔记引用打开当时的版本与来源，并提示后续修订或归档。
 
 **2026-10-05：Zotero 有据问答 + 个人文献记忆闭环持续完善。** 插件支持原文证据问答、带来源摘录创建专题笔记、revision 历史、归档，以及把“论文原文依据”和“你的个人记录”分开回答的组合问答；多文献条件对照保留首版，暂不继续扩展。详见 [个人文献记忆交付](docs/个人文献记忆交付.md)。
 
@@ -66,9 +66,9 @@ Zotero 插件 + Python 检索后端。在自己的文献库上做**带出处的�
 
 ## 部署现状
 
-当前部署（2026-10-06）：项目运行于 `research-web:/home/ubuntu/research-assistant/app`，数据和 release 快照位于 `/mnt/research-data/research-assistant`。网页、Qdrant、Qwen 嵌入和 MinerU 由四个 systemd 服务管理，只监听服务器回环地址。本机运行 `scripts/start_agent_assistant_tunnel.ps1`，再访问 [阅读器](http://127.0.0.1:8765/reader)。本机和旧服务器均保留为回退副本；没有删除用户文献、模型或 SQLite。最近一次发布经过健康检查，部署包只覆盖项目代码、测试和文档；具体 release 时间见 [问题排查笔记](问题排查笔记.md)。部署细节和验证证据见 [迁移报告](docs/deployment/agent-assistant迁移报告.md)，报告顶部标注当前状态，后续旧段落仅为历史记录。
+本地安装、服务配置和启动方法见 [部署说明](deployment/README.md) 和 [插件说明](deployment/zotero/README.md)。
 
-模型 API 在服务器 `/home/ubuntu/research-assistant/app/.env` 修改，文件权限为 `600`。问答与 Agent 使用 `OPENAI_API_KEY`、`OPENAI_MODEL`、`OPENAI_BASE_URL`；全文/选区翻译默认复用这三项，也可用 `TRANSLATION_API_KEY`、`TRANSLATION_MODEL`、`TRANSLATION_BASE_URL` 单独覆盖。修改后执行 `ssh research-web "sudo systemctl restart research-assistant-web"`，无需重启 Qdrant、MinerU 或嵌入服务。不要把密钥写入 README 或提交到仓库。
+问答与 Agent 使用 `OPENAI_API_KEY`、`OPENAI_MODEL`、`OPENAI_BASE_URL`。翻译可通过 `TRANSLATION_API_KEY`、`TRANSLATION_MODEL`、`TRANSLATION_BASE_URL` 单独配置。
 
 插件认证后的 `/api/knowledge/status` 还返回不含正文的运行计数：知识库、文献、外部 Zotero 记录、已确认个人笔记，以及问答任务状态和 `scope=notes` 任务数。它用于判断真实使用是否已经产生可评测的个人记忆样本，不返回问题、摘录或密钥。
 
@@ -118,7 +118,6 @@ Zotero 插件 + Python 检索后端。在自己的文献库上做**带出处的�
 
 完整架构与端到端原理先看 [项目介绍](docs/项目介绍.md)；实现细节、实验和取舍见 [项目技术报告](docs/项目技术报告.md)。当前专注文献问答与多文献对照，研究计划暂缓重构。
 
-面向求职的学习方式见 [岗位对齐与学习路线](docs/岗位对齐与学习路线.md)。当前课程是 [Agent 可观测性与并行实验](docs/学习笔记/01_Agent可观测性与并行实验.md)：包含为什么做、关键代码、开源源码参考、实验结果及用户自己的小改动；项目完成和个人掌握分别验收。
 
 当前支持：
 
@@ -316,7 +315,7 @@ Qwen 权重保存在远程项目 `models/Qwen3-VL-Embedding-2B`。服务通过 G
 
 远程启动服务（服务器重启后需要重新启动，当前不是 systemd 服务）：
 
-    ssh -p 36969 research-gpu /home/researcher/dst/research_assistant/.venv/bin/python /home/researcher/dst/research_assistant/start_remote_embedding.py
+    ssh research-gpu /path/to/project/.venv/bin/python /path/to/project/deployment/embedding/start_remote_embedding.py
 
 本机启动独立隧道，再启动网页：
 
@@ -394,5 +393,3 @@ Qwen 权重保存在远程项目 `models/Qwen3-VL-Embedding-2B`。服务通过 G
 完整的系统目标、架构、数据流、存储结构、检索算法、Agent 工作方式、可靠性设计、实测结果和已知限制见 [项目技术报告](docs/项目技术报告.md)。
 
 ## 开发与排错笔记
-
-项目开发和使用过程中遇到的问题统一记录在 [问题排查笔记](问题排查笔记.md)。每次诊断或修复后，都要补充现象、根因、处理方式和验证结果；笔记中不得记录 API Key 或用户文献原文。

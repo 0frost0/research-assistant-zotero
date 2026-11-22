@@ -161,6 +161,8 @@ def publish(output):
     import os
     if git("status", "--porcelain").strip():
         raise ValueError("Commit the complete public source before publishing")
+    if git("ls-files", "-ci", "--exclude-from=.gitignore").strip():
+        raise ValueError("Ignored local files are tracked")
     if git("rev-parse", "HEAD") != git("rev-parse", "origin/main"):
         raise ValueError("Push current source before publishing")
     credentials = subprocess.run(["git", "credential", "fill"], input="protocol=https\nhost=github.com\n\n",

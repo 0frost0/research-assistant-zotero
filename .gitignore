@@ -49,3 +49,16 @@ deployment/embedding/api-key
 
 # Private real-library evaluation anchors (keep local, publish aggregate receipts only)
 benchmarks/datasets/qwen_stage1_library_development.json
+
+# Local research, career notes, and deployment-specific operations
+/private/
+/ara/
+/docs/学习笔记/
+/docs/岗位对齐与学习路线.md
+/docs/简历项目经历.md
+/docs/演示与面试主线.md
+/问题排查笔记.md
+/docs/deployment/2026-11-07-node17-GPU服务.md
+/docs/deployment/agent-assistant迁移报告.md
+/docs/deployment/服务器迁移与模型复用.md
+/docs/releases/artifacts/retained-bundles.json

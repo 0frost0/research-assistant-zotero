@@ -16,6 +16,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Reject tracked local material
+        run: |
+          tracked=$(git ls-files -ci --exclude-from=.gitignore)
+          if [ -n "$tracked" ]; then
+            printf '%s\n' 'Ignored local files are tracked.'
+            exit 1
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: "20"

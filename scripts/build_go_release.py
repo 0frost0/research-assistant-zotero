@@ -19,6 +19,8 @@ def build(root, output):
         return subprocess.check_output(["git", *args], cwd=root)
     if git("status", "--porcelain").strip():
         raise ValueError("Clean checkout required")
+    if git("ls-files", "-ci", "--exclude-from=.gitignore").strip():
+        raise ValueError("Ignored local files are tracked")
     sha = git("rev-parse", "HEAD").decode().strip()
     output.mkdir(parents=True, exist_ok=False)
     platform = subprocess.check_output(["go", "env", "GOOS", "GOARCH"], cwd=root / "backend", text=True).splitlines()
