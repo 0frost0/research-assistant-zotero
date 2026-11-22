@@ -25,6 +25,18 @@ func (f *fakeWorker) Call(_ context.Context, _ string, op string, d Object) (Obj
 	f.values = f.values[1:]
 	return Object{"value": asJSON(value), "usage": Object{"input_tokens": 1, "output_tokens": 1}}, nil
 }
+
+func TestIdentifierOnlyCandidateCannotBecomeMemoryEvidence(t *testing.T) {
+	hit := Object{"kind": "user_note", "quote": "EHR event intervals", "score": .8}
+	if !relevant("EHR", hit) {
+		t.Fatal("ordinary exact match should pass")
+	}
+	hit["identifier_only"] = true
+	if relevant("EHR", hit) {
+		t.Fatal("identifier-only candidate passed the memory evidence filter")
+	}
+}
+
 func TestStrictModelOutput(t *testing.T) {
 	valid := asJSON(Object{"question_relevant": true, "verdicts": []Object{{"claim_index": 0, "supported": true, "reason": "supported"}}})
 	if !validReview(valid) {

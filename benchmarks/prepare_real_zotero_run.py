@@ -10,7 +10,7 @@ import sqlite3
 import sys
 
 
-def prepare(source, target, connection, base, port, comparison=False, workflow=False, history=False, native_engine=False):
+def prepare(source, target, connection, base, port, comparison=False, workflow=False, history=False, native_engine=False, memory_recovery=False):
     source, target = source.resolve(), target.resolve()
     if not target.is_relative_to(source / "output"):
         raise ValueError("Target must be a new directory under project output/")
@@ -36,6 +36,7 @@ def prepare(source, target, connection, base, port, comparison=False, workflow=F
     data.mkdir()
     shutil.copytree(source / "deployment/zotero", plugin)
     prefs = {"extensions.zotero.dataDir": str(data), "extensions.zotero.useDataDir": True,
+             "extensions.zotero.firstRun2": False,
              "extensions.zotero.sync.autoSync": False, "extensions.update.enabled": False,
              "extensions.zoteroWinWordIntegration.skipInstallation": True,
              "extensions.zoteroOpenOfficeIntegration.skipInstallation": True,
@@ -54,8 +55,9 @@ def prepare(source, target, connection, base, port, comparison=False, workflow=F
     script = "zotero_real_workflow.js" if workflow else "zotero_real_comparison.js" if comparison else "zotero_real_questions.js"
     if history:
         script = "zotero_real_history.js"
-    if native_engine:
+    if native_engine or memory_recovery:
         config.update(native_engine=True, endpoint="http://127.0.0.1:8765",
+                      memory_recovery=memory_recovery,
                       engine_python=sys.executable, engine_script=str(source / "scripts/start_go_engine.py"))
         script = "zotero_real_engine.js"
     if workflow:
@@ -96,5 +98,6 @@ if __name__ == "__main__":
     mode.add_argument("--workflow", action="store_true", help="Run native sync, upload, note history and parsing on an isolated real PDF")
     mode.add_argument("--history", action="store_true", help="Exercise feedback, cancellation and manual retry on an isolated library with QA history")
     mode.add_argument("--native-engine", action="store_true", help="Have Zotero itself launch and stop the local Go engine on desktop port 8765")
+    mode.add_argument("--memory-recovery", action="store_true", help="Native offline-embedding probe with two notes QA requests, up to four generation calls")
     a = p.parse_args()
-    prepare(a.source, a.target, a.connection, a.base, a.port, a.comparison, a.workflow, a.history, a.native_engine)
+    prepare(a.source, a.target, a.connection, a.base, a.port, a.comparison, a.workflow, a.history, a.native_engine, a.memory_recovery)

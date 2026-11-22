@@ -670,6 +670,16 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(result["revision_accuracy"], 1)
         self.assertEqual(result["source_link_rate"], 1)
 
+    def test_memory_benchmark_ranks_current_revision_once(self):
+        from benchmarks.evaluate_personal_memory import memory_metrics
+        wanted = {"entity_id": "n1", "revision": 2, "quote": "same wording"}
+        hit = {**wanted, "kind": "user_note"}
+        stale = {**hit, "revision": 1}
+        self.assertEqual(memory_metrics([stale], [wanted])["recall_at_6"], 0)
+        metrics = memory_metrics([stale, hit, hit], [wanted])
+        self.assertEqual(metrics["revision_accuracy"], 1)
+        self.assertEqual(metrics["mrr_at_6"], 0.5)
+
     def test_memory_evaluation_refuses_wrong_declared_split(self):
         from benchmarks.evaluate_personal_memory import check_split
         self.assertEqual(check_split({"split": "test"}, "test"), "test")

@@ -819,6 +819,8 @@ def note_candidate_relevant(query, hit, min_coverage=0.20):
     backend score threshold. Non-user notes are left untouched because they
     are not consumed by ``MemoryQA``.
     """
+    if hit.get("identifier_only"):
+        return False
     if hit.get("kind") not in PERSONAL_NOTE_KINDS:
         return True
     terms = _note_query_terms(query)

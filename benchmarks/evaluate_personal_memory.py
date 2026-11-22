@@ -1,4 +1,4 @@
-"""Evaluate current personal-note retrieval without calling a model.
+"""Evaluate personal-note retrieval without calling a generation model.
 
 Dataset format::
 
@@ -38,8 +38,8 @@ def check_split(dataset, expected_split=None):
 
 def memory_metrics(results, expected, k=6):
     ranked = results[:k]
-    matched, first = set(), None
-    revision_hits, links, personal_count = 0, 0, 0
+    matched, correct_revision, first = set(), set(), None
+    links, personal_count = 0, 0
     for rank, item in enumerate(ranked, 1):
         if item.get("kind") not in PERSONAL_NOTE_KINDS:
             continue
@@ -54,12 +54,13 @@ def memory_metrics(results, expected, k=6):
             same_quote = bool(quote) and quote in normalized(item.get("quote", ""))
             if same_identity and same_kind and same_quote:
                 matched.add(index)
-                revision_hits += int(same_revision)
-                first = first or rank
+                if same_revision:
+                    correct_revision.add(index)
+                    first = first or rank
     return {
-        "recall_at_6": len(matched) / len(expected) if expected else None,
+        "recall_at_6": len(correct_revision) / len(expected) if expected else None,
         "mrr_at_6": (1 / first if first else 0) if expected else None,
-        "revision_accuracy": revision_hits / len(matched) if matched else None,
+        "revision_accuracy": len(correct_revision) / len(matched) if matched else None,
         "source_link_rate": links / personal_count if personal_count else None,
         "returned": len(ranked),
     }
@@ -118,7 +119,8 @@ if __name__ == "__main__":
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--dataset", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--backend", choices=["tfidf", "multimodal"], default="tfidf")
+    parser.add_argument("--backend", choices=["tfidf", "multimodal", "bge"], default="tfidf",
+                        help="bge uses locally installed weights only")
     parser.add_argument("--expected-split", choices=["development", "test"],
                         help="Require the dataset to have this split; use test for a frozen holdout run.")
     parser.add_argument("--apply-memory-gate", action="store_true",

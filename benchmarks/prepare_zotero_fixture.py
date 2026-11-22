@@ -45,6 +45,7 @@ prefs = {
     "app.update.auto": False,
     "app.update.enabled": False,
     "extensions.zotero.firstRunGuidanceShown.zotero7Banner": True,
+    "extensions.zotero.firstRun2": False,
     "extensions.zotero.firstRunGuidance": False,
 }
 (profile / "user.js").write_text("\n".join("user_pref(" + json.dumps(k) + ", " + json.dumps(v) + ");"

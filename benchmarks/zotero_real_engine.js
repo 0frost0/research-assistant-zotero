@@ -35,6 +35,20 @@ async function runRealQuestions() {
     if (!exact.results.some(hit => hit.entity_id === note.id && hit.revision === note.revision))
       throw new Error("Exact note search missed its revision");
     report.exact_note_revision_found = true;
+    if (config.memory_recovery) {
+      if (answer.backend !== "tfidf" || !answer.results.some(hit => hit.identifier_only))
+        throw new Error("Expected cold offline identifier fallback");
+      report.questions = [];
+      for (const [id, query] of [["ehr", search.query], ["budget", "我记录的 EHR 火星基地建造预算是多少？"]]) {
+        const result = await bridge.request("ask", {query, scope: "notes", kb_ids: [config.base]});
+        report.questions.push({id, status: result.status, claims: result.claims.length,
+          rewrites: result.trace.rewrite_rounds, model_calls: result.trace.model_calls});
+        if (result.trace.rewrite_rounds > 1 || result.trace.model_calls > 2)
+          throw new Error("Exceeded personal-memory request budget");
+        if (id === "budget" && (result.status !== "no_evidence" || result.claims.length))
+          throw new Error("Unrelated question sharing the acronym did not refuse");
+      }
+    }
     // Match the native stop-on-exit operation, including its forced-kill timeout.
     await bridge.engineProcess.kill(1000);
     await bridge.engineProcess.wait();

@@ -96,6 +96,19 @@ class KnowledgeTests(unittest.TestCase):
             self.assertEqual(self.service.search({**query, "query": "ZZZ999"})["results"], [])
         self.assertEqual(self.service.search(query), normal)
 
+    def test_identifier_rescue_is_scoped_and_never_direct_answer_evidence(self):
+        from research_assistant.knowledge.qa import note_candidate_relevant
+        from research_assistant.knowledge.service import identifier_candidates
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        index = Mock()
+        index.search_results.return_value = [SimpleNamespace(quote=q) for q in
+            ["MEHR is longer", "EHR2 data", "EHR admissions", "ehr and ICU visits"]]
+        found = identifier_candidates(index, "EHR 和 ICU 的时间差？", {"a"}, 3)
+        self.assertEqual([item.quote for item in found], ["ehr and ICU visits"])
+        index.search_results.assert_called_once_with("EHR ICU", sources=["a"], k=20, min_score=0)
+        self.assertFalse(note_candidate_relevant("EHR", {"kind": "user_note", "quote": "EHR", "identifier_only": True}))
+
     def test_partial_snapshot_or_missing_attachment_does_not_remove_members(self):
         self.sync(self.a, [self.doc])
         for change in ({"complete": False}, {"entities": [{**self.doc, "hash": "0" * 64}]}):

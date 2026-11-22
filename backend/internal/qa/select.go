@@ -17,6 +17,9 @@ func personal(e Object) bool {
 	return k == "user_note" || k == "external_note" || k == "external_annotation"
 }
 func relevant(query string, e Object) bool {
+	if e["identifier_only"] == true {
+		return false
+	}
 	ignored := map[string]bool{"什么": true, "怎么": true, "如何": true, "哪些": true, "是否": true, "为什么": true, "请问": true, "介绍": true}
 	terms := map[string]bool{}
 	for _, term := range termsRE.FindAllString(strings.ToLower(query), -1) {

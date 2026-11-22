@@ -2,6 +2,7 @@
 import json
 import threading
 import hashlib
+import re
 import time
 from collections import OrderedDict
 from contextvars import copy_context
@@ -16,6 +17,19 @@ from research_assistant.knowledge.store import digest, text
 
 def note_source(ident, revision):
     return f"notes/{ident}-{revision}.md"
+
+
+def identifier_candidates(index, query, sources, count):
+    """Recover scoped candidates for a cross-language rewrite after an empty lexical search."""
+    if not re.search(r"[\u4e00-\u9fff]", query):
+        return []
+    boundary = r"(?<![A-Za-z0-9_-]){}(?![A-Za-z0-9_-])"
+    identifiers = dict.fromkeys(re.findall(boundary.format(r"[A-Z][A-Z0-9]+(?:[-_][A-Z0-9]+)*"), query))
+    if not identifiers:
+        return []
+    terms = [re.compile(boundary.format(re.escape(term)), re.I) for term in identifiers]
+    pool = index.search_results(" ".join(identifiers), sources=list(sources), k=20, min_score=0)
+    return [hit for hit in pool if all(term.search(hit.quote) for term in terms)][:count]
 
 
 def zotero_url(library, item_key, page=None):
@@ -43,8 +57,8 @@ class CachedIndex(LiteratureIndex):
 
 class KnowledgeService:
     def __init__(self, store, backend="tfidf"):
-        if backend not in {"tfidf", "multimodal"}:
-            raise ValueError("知识库仅支持 tfidf 或 multimodal。")
+        if backend not in {"tfidf", "multimodal", "bge"}:
+            raise ValueError("知识库仅支持 tfidf、multimodal 或本地 bge。")
         self.store, self.backend = store, backend
         self.lock = threading.RLock()
         self.signature, self.index = None, None
@@ -215,6 +229,8 @@ class KnowledgeService:
             with self.lock:
                 index = self.get_index(set(sources), background=True)
                 if index is not None:
+                    identifier_only = False
+                    lexical = index if index.backend == "tfidf" or index.unified_error else None
                     try:
                         hits = index.search_results(
                             query, sources=list(sources), k=count,
@@ -228,8 +244,14 @@ class KnowledgeService:
                         if index.notes_fallback is None:
                             index.notes_fallback = CachedIndex(self.store.home, index.documents, "tfidf")
                         hits = index.notes_fallback.search_results(query, sources=list(sources), k=count)
+                        lexical = index.notes_fallback
                         effective = "tfidf"
                         warnings.append("本次笔记查询无法访问编码服务，已使用关键词检索。")
+                    if not hits and scope == "notes" and retrieval_mode == "legacy" and lexical is not None:
+                        hits = identifier_candidates(lexical, query, sources, count)
+                        if hits:
+                            identifier_only = True
+                            warnings.append("完整问题未命中；以下笔记仅精确匹配问题中的缩写，供核对。")
                     if multimodal and retrieval_mode == "hybrid" and index.unified_index is not None:
                         try:
                             visual_hits = index.unified_index.search(query, k=20, min_score=0.35,
@@ -268,6 +290,8 @@ class KnowledgeService:
                                         "source_id": hit.source})
                         if getattr(hit, "ranking", None):
                             results[-1]["ranking"] = hit.ranking
+                        if identifier_only:
+                            results[-1]["identifier_only"] = True
                         if multimodal and hit.modality == "image":
                             results[-1]["visual_caption"] = hit.visual_caption or ""
                             results[-1]["_image_path"] = hit.image_path
