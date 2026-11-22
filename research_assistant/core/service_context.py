@@ -12,13 +12,13 @@ service_context = ContextVar("research_service_config", default=None)
 
 
 @contextmanager
-def stored_service_context(root, connection=None):
-    """Let explicit CLI runs use the same saved profile as the Zotero API."""
+def stored_service_context(root, connection=None, *, allow_missing=False):
+    """Load a saved profile. A search caller may use defaults for an unsaved profile."""
     if not connection:
         yield
         return
     config = ServiceConfigStore(root).get(connection)
-    if not config:
+    if not config and not allow_missing:
         raise ValueError("指定连接没有服务配置，请检查 --connection。")
     token = service_context.set({"connection": connection, "config": config})
     try:

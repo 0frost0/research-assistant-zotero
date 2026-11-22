@@ -1,7 +1,9 @@
 const $ = id => document.getElementById(id);
 const fragment = new URLSearchParams(location.hash.slice(1));
 let token = fragment.get("token") || sessionStorage.getItem("knowledge-token") || "";
+const connection = fragment.get("connection") ?? sessionStorage.getItem("knowledge-connection") ?? "";
 if (token) sessionStorage.setItem("knowledge-token", token);
+if (fragment.has("connection")) sessionStorage.setItem("knowledge-connection", connection);
 history.replaceState(null, "", location.pathname + location.search);
 const params = new URLSearchParams(location.search);
 let pendingNote = params.get("note");
@@ -13,7 +15,11 @@ const node = (tag, value, cls) => { const n = document.createElement(tag); n.tex
 async function api(path, data, binary = false) {
   const response = await fetch("/api/knowledge/" + path, {
     method: data === undefined ? "GET" : "POST",
-    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "application/json",
+      ...(connection ? { "X-Research-Connection": connection } : {}),
+    },
     body: data === undefined ? undefined : JSON.stringify(data), cache: "no-store",
   });
   if (!response.ok) {
@@ -99,6 +105,12 @@ async function refresh() {
   renderBases();
   if (active) await selectBase(active);
 }
+async function connect() {
+  const status = await api("status");
+  $("projectsLink").hidden = status.runtime === "go";
+  sessionStorage.setItem("knowledge-token", token);
+  await refresh();
+}
 $("searchForm").addEventListener("submit", async event => {
   event.preventDefault();
   if (!selected.size) return notice("请勾选至少一个知识库。");
@@ -111,15 +123,19 @@ $("searchForm").addEventListener("submit", async event => {
     const started = Date.now();
     while (result.status === "indexing") {
       if (generation !== epoch) return;
-      notice(result.warning);
+      notice(result.warning || "正在准备语义索引，完成后会自动检索。");
       $("resultMeta").textContent = "正在准备语义索引";
-      if (Date.now() - started > 180000) return;
+      if (Date.now() - started > 180000) {
+        throw new Error("索引仍在准备，请稍后重新检索。");
+      }
       await new Promise(resolve => setTimeout(resolve, 2000));
+      if (generation !== epoch) return;
       result = await api("search", payload);
     }
     if (generation !== epoch) return;
     $("results").replaceChildren();
-    $("resultMeta").textContent = `${result.results.length} 条结果 · ${result.backend === "tfidf" ? "关键词检索" : "语义检索"}`;
+    const lexical = result.backend === "tfidf" || result.backend?.startsWith("bm25-lexical");
+    $("resultMeta").textContent = `${result.results.length} 条结果 · ${lexical ? "关键词检索" : "语义检索"}`;
     for (const hit of result.results) {
       const row = node("article", "", "result");
       const top = node("div", "", "result-top");
@@ -155,7 +171,7 @@ $("noteForm").addEventListener("submit", async event => {
 });
 $("connectForm").addEventListener("submit", async event => {
   event.preventDefault(); token = $("token").value.trim();
-  try { await api("status"); sessionStorage.setItem("knowledge-token", token); $("token").value = ""; $("connectDialog").close(); await refresh(); notice(""); }
+  try { await connect(); $("token").value = ""; $("connectDialog").close(); notice(""); }
   catch (error) { notice(error.message); }
 });
 $("connection").onclick = () => $("connectDialog").showModal();
@@ -186,5 +202,5 @@ for (const input of document.querySelectorAll("[name=scope]")) input.onchange = 
 };
 $("query").value = params.get("q") || "";
 icons();
-if (token) refresh().catch(error => { notice(error.message); $("connectDialog").showModal(); });
+if (token) connect().catch(error => { notice(error.message); $("connectDialog").showModal(); });
 else $("connectDialog").showModal();

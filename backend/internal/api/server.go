@@ -146,6 +146,46 @@ func stringsList(v any) ([]string, error) {
 
 var conversationRE = regexp.MustCompile(`^[A-Za-z0-9_-]{1,80}$`)
 
+func validateSearch(d Object) error {
+	if _, err := stringsList(d["kb_ids"]); err != nil {
+		return err
+	}
+	if _, err := store.Text(d["query"], 2000, false); err != nil {
+		return err
+	}
+	scope := store.Default(d, "scope", "both")
+	if scope != "original" && scope != "notes" && scope != "both" {
+		return store.ErrInvalid
+	}
+	count, ok := store.Int(store.Default(d, "k", 8))
+	if !ok || count < 1 || count > 20 {
+		return store.ErrInvalid
+	}
+	textOnly, textOK := store.Default(d, "text_only", false).(bool)
+	visual, visualOK := store.Default(d, "multimodal", false).(bool)
+	if !textOK || !visualOK || visual && (textOnly || scope == "notes") {
+		return store.ErrInvalid
+	}
+	mode := store.Default(d, "retrieval_mode", "legacy")
+	if mode != "legacy" && (mode != "hybrid" || !textOnly && !visual) {
+		return store.ErrInvalid
+	}
+	if raw := d["source_ids"]; raw != nil {
+		ids, err := stringsList(raw)
+		if err != nil || len(ids) > 4 {
+			return store.ErrInvalid
+		}
+		seen := map[string]bool{}
+		for _, id := range ids {
+			if strings.TrimSpace(id) == "" || seen[id] {
+				return store.ErrInvalid
+			}
+			seen[id] = true
+		}
+	}
+	return nil
+}
+
 func validateAsk(d Object) error {
 	if _, err := stringsList(d["kb_ids"]); err != nil {
 		return err
@@ -355,9 +395,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case "notes":
 			result, err = s.Store.SaveNote(ctx, store.String(d["kb_id"]), id, d)
 		case "search":
-			result, err = s.Worker.Call(ctx, connection, "search", Object{"payload": d})
-			if v, ok := result.(map[string]any); ok && v["status"] == "indexing" {
-				status = 202
+			if err = validateSearch(d); err == nil {
+				var search Object
+				search, err = s.Worker.Call(ctx, connection, "search", Object{"payload": d})
+				if search["status"] == "indexing" {
+					status = 202
+				}
+				result = search
 			}
 		case "ask", "ask-async":
 			err = validateAsk(d)

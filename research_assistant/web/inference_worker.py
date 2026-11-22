@@ -29,8 +29,8 @@ def create_worker(root, token):
         import json
         try:
             data = json.loads(raw)
-            with stored_service_context(root, data["connection"]):
-                operation, payload = request.path_params["operation"], data["payload"]
+            operation, payload = request.path_params["operation"], data["payload"]
+            with stored_service_context(root, data["connection"], allow_missing=operation == "search"):
                 if operation == "search":
                     result = await asyncio.to_thread(service.search, payload)
                 elif operation == "model":

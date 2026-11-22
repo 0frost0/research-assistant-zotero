@@ -1,6 +1,15 @@
 # Go 主后端迁移与验收
 
-更新：2026-11-19。Go 负责产品 API、SQLite 数据、revision、任务状态、问答编排、反馈、备份和解析队列；Python 保留模型调用、PDF/OCR/MinerU 以及当前检索索引 worker。当前不能称为“Python 仅模型/OCR”，因为检索仍由 worker 提供。
+更新：2026-11-22。Go 负责知识库工作台、产品 API、SQLite 数据、revision、任务状态、问答编排、反馈、备份和解析队列。Python worker 提供检索索引、模型调用和 PDF/OCR/MinerU。
+
+## Go 知识库工作台
+
+使用下文的本地 Go 启动入口，在同一端口打开 `/knowledge`（例如 `http://127.0.0.1:8765/knowledge`），输入该引擎的 Zotero 连接令牌。配置了独立模型服务分组时，可用 `#connection=<配置组 ID>` 选择同一分组。独立运行 `researchd` 时，通过 `-web-static research_assistant/web/static` 指定共享工作台资源。
+
+- 浏览器与 Zotero 共用 `/api/knowledge/`、令牌校验和 SQLite 数据，因此笔记修订和备份使用同一写入路径。Go 在检索参数无效时返回 400，索引准备时返回 202，工作台会继续轮询并展示实际检索方式。
+- Chrome 隔离验收使用两个合成知识库。断开编码服务后，工作台从索引准备转为关键词检索，仅返回选中库的笔记。点击来源跳到对应笔记，修改后显示 v2。页面下载的 ZIP 用 Python 恢复到独立目录，读回两个库和笔记 v2。验收未调用生成模型。
+- 原生 Zotero 10.0.8 首轮能启动 Go，但连接分组尚无服务配置时，worker 在检索前拒绝请求，界面显示 `unavailable`。修复后该分组的检索使用默认配置，模型调用仍要求已选分组有配置。使用 `--native-engine` 在隔离库复验，确认同一端口提供工作台，编码服务不可用时 TF-IDF 命中 1 条笔记，按正文找回目标 revision，退出后 Go 停止。复验仅运行检索，结果保存在本地 `output/zotero/real-go-workbench-native-20261122-r2/result.json`。
+- 阅读器、研究项目网页及语义检索索引仍在 Python。此次验收覆盖知识库工作台与本地 API，生产仍使用现有配置。
 
 ## 已验证
 
@@ -61,6 +70,7 @@ Python 启动器先在随机回环端口启动私有推理服务，再拉起 Go 
 - 提交 `6929f3b` 首次推送两次发生 GitHub 443 TCP 超时；后续 DNS、TLS 和 `ls-remote` 恢复，正常推送成功，远端 SHA 已核对。
 - 首轮远端 CI 的 Python、Node、XPI job 成功，Go job 在测试阶段失败。Go job 缺少 Python 环境与存储契约所需的 `pypdf`；提交 `a1f1334` 补显式 Python 3.12、pypdf 与 `PYTHON_EXECUTABLE`，Go 缓存路径改为 `backend/go.sum`。[修复后远端 CI](https://github.com/0frost0/research-assistant-zotero/actions/runs/44342282197) 四个 job 全部成功；本地 Go test/vet 同样通过。旧失败日志下载受连接重置影响，未取得完整 traceback，不将推断写成日志原文。
 - `v0.4.0-go-core` 是核心迁移 prerelease。初始 Windows 包由未提交工作树构建，内嵌 `vcs.revision=a4c0c3f`、`vcs.modified=true`，不能以文件名声称它是干净 `6929f3b` 构建。已补发 `-clean.exe`、`-git.zip` 和 provenance JSON，原资产保留；GitHub digest 与本地 SHA256 一致，见 `docs/releases/artifacts/go-core-clean-verification.json`。
+- 2026-11-22 已下架两份源码 ZIP，原始产物与构建收据保存在本地。公开源码以重写后的标签为准，EXE 保留其历史构建身份。
 - 干净构建已完成：独立 clone checkout `6929f3b`，`go build -trimpath`，`go version -m` 确认完整 revision 与 `vcs.modified=false`。旧源码 ZIP 与 Git blob 仅有 CRLF/LF 差异；新源码包必须使用 `git -c core.autocrlf=false archive`，并逐文件检查，不能假定默认 `git archive` 忽略本机换行配置。
 - 后续构建入口：`python scripts/build_go_release.py --checkout <clean-checkout> --output <outside-checkout-new-directory>`。脚本拒绝脏工作树及仓库内输出，核对 EXE revision/modified、源码文件列表和每个 Git blob，输出 SHA256 收据，不自动覆盖旧资产。
 - 上述脚本已实际重复构建 `6929f3b`，EXE 与源码 ZIP 的 SHA256 均与已上传干净资产一致（同一 Windows / Go 1.27.3 环境）。

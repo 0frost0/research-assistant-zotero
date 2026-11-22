@@ -25,6 +25,7 @@ func main() {
 	workerToken := flag.String("worker-token-file", "", "Private inference token file")
 	managed := flag.Bool("managed-stdin", false, "Read private worker token line from stdin and stop when launcher closes the pipe")
 	reranker := flag.String("reranker", "http://127.0.0.1:30002/rerank", "Project reranker URL")
+	webStatic := flag.String("web-static", "", "Directory containing the shared knowledge workbench assets")
 	flag.Parse()
 	host, _, err := net.SplitHostPort(*bind)
 	if err != nil || net.ParseIP(host) == nil || !net.ParseIP(host).IsLoopback() {
@@ -72,7 +73,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer app.Close()
-	server := &http.Server{Addr: *bind, Handler: app, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16384}
+	server := &http.Server{Addr: *bind, Handler: app.Handler(*webStatic), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16384}
 	go func() {
 		<-stop.Done()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

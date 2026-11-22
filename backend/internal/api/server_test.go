@@ -1,7 +1,10 @@
 package api
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -21,7 +24,7 @@ func testServer(t *testing.T) *Server {
 	t.Cleanup(s.Close)
 	return s
 }
-func request(s *Server, method, path, body, auth, origin string) *httptest.ResponseRecorder {
+func request(s http.Handler, method, path, body, auth, origin string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(method, "http://127.0.0.1:8776/api/knowledge/"+path, strings.NewReader(body))
 	r.Header.Set("Authorization", auth)
 	r.Header.Set("Origin", origin)
@@ -29,6 +32,54 @@ func request(s *Server, method, path, body, auth, origin string) *httptest.Respo
 	w := httptest.NewRecorder()
 	s.ServeHTTP(w, r)
 	return w
+}
+func TestKnowledgeWorkbenchSharesGoAPI(t *testing.T) {
+	s := testServer(t)
+	web := s.Handler(filepath.Join("..", "..", "..", "research_assistant", "web", "static"))
+	for path, fragment := range map[string]string{
+		"/knowledge": "searchForm", "/static/knowledge.js": "/api/knowledge/",
+		"/static/knowledge.css": ".workspace", "/static/vendor/lucide.min.js": "lucide",
+	} {
+		w := httptest.NewRecorder()
+		web.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+		if w.Code != 200 || !strings.Contains(w.Body.String(), fragment) || w.Header().Get("Referrer-Policy") != "no-referrer" {
+			t.Fatalf("%s: unexpected status or asset headers (%d)", path, w.Code)
+		}
+	}
+	for _, path := range []string{"/static/index.html", "/.data/zotero/connection-token", "/api/status", "/projects"} {
+		w := httptest.NewRecorder()
+		web.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+		if w.Code != 404 {
+			t.Fatalf("%s: expected 404, got %d", path, w.Code)
+		}
+	}
+	const origin = "http://127.0.0.1:8776"
+	const auth = "Bearer test-token"
+	if w := request(web, "GET", "status", "", "", ""); w.Code != 401 {
+		t.Fatal(w.Code)
+	}
+	if w := request(web, "GET", "status", "", auth, origin); w.Code != 200 || !strings.Contains(w.Body.String(), `"runtime":"go"`) {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	for _, payload := range []string{
+		`{"kb_ids":[],"query":"notes"}`,
+		`{"kb_ids":["base"],"query":"notes","k":21}`,
+		`{"kb_ids":["base"],"query":"notes","scope":"notes","multimodal":true}`,
+		`{"kb_ids":["base"],"query":"notes","source_ids":["a","a"]}`,
+	} {
+		if w := request(web, "POST", "search", payload, auth, origin); w.Code != 400 {
+			t.Fatal(w.Code, w.Body.String())
+		}
+	}
+	w := request(web, "GET", "export", "", auth, origin)
+	if w.Code != 200 {
+		t.Fatal(w.Code)
+	}
+	raw := w.Body.Bytes()
+	z, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
+	if err != nil || len(z.File) == 0 {
+		t.Fatal("workbench export is not a readable ZIP", err)
+	}
 }
 func TestAuthenticationAndRevisionHTTP(t *testing.T) {
 	s := testServer(t)

@@ -14,6 +14,9 @@ async function runRealQuestions() {
     const status = await bridge.startEngine();
     if (!status.connected || status.runtime !== "go") throw new Error("Expected Go API");
     report.runtime = status.runtime;
+    const page = await Zotero.HTTP.request("GET", config.endpoint + "/knowledge");
+    if (!page.responseText.includes('id="searchForm"')) throw new Error("Expected Go knowledge workbench");
+    report.knowledge_workbench_served = true;
     const search = {
       query: config.cases.find(test => test.scope === "notes").query,
       kb_ids: [config.base], scope: "notes", k: 5,

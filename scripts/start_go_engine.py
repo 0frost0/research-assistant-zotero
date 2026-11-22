@@ -9,6 +9,7 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+WEB_STATIC = ROOT / "research_assistant/web/static"
 sys.path.insert(0, str(ROOT))
 
 
@@ -48,6 +49,7 @@ async def serve(root, executable, port):
             api = await asyncio.create_subprocess_exec(
                 str(executable), "-root", str(root), "-listen", f"127.0.0.1:{port}",
                 "-worker", worker_url, "-managed-stdin", "-reranker", reranker,
+                "-web-static", str(WEB_STATIC),
                 stdin=asyncio.subprocess.PIPE, cwd=ROOT,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
             )

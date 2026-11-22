@@ -7,10 +7,25 @@ import unittest
 from unittest.mock import patch
 
 from starlette.testclient import TestClient
+from research_assistant.knowledge.service import KnowledgeService
 from research_assistant.web.inference_worker import create_worker
 
 
 class InferenceWorkerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_search_accepts_connection_without_saved_services(self):
+        with tempfile.TemporaryDirectory() as root:
+            app = create_worker(Path(root), "worker-token")
+            with TestClient(app, headers={"Authorization": "Bearer worker-token"}) as client:
+                with patch.object(KnowledgeService, "search", return_value={"results": []}) as search:
+                    query = {"query": "note", "kb_ids": ["sample"], "scope": "notes"}
+                    response = client.post("/internal/search", json={"connection": "new", "payload": query})
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.json(), {"results": []})
+                    search.assert_called_once_with(query)
+                response = client.post("/internal/model", json={"connection": "new", "payload": {}})
+                self.assertEqual(response.status_code, 503)
+                self.assertEqual(response.json(), {"error": "ValueError"})
+
     async def test_disconnect_cancels_model_request(self):
         with tempfile.TemporaryDirectory() as root:
             app = create_worker(Path(root), "worker-token")
