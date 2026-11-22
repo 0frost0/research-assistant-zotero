@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from starlette.testclient import TestClient
 from research_assistant.knowledge.service import KnowledgeService
+from research_assistant.knowledge.store import KnowledgeStore
 from research_assistant.web.inference_worker import create_worker
 
 
@@ -21,10 +22,35 @@ class InferenceWorkerTests(unittest.IsolatedAsyncioTestCase):
                     response = client.post("/internal/search", json={"connection": "new", "payload": query})
                     self.assertEqual(response.status_code, 200)
                     self.assertEqual(response.json(), {"results": []})
-                    search.assert_called_once_with(query)
+                    search.assert_called_once_with(query, expected_revisions=None)
                 response = client.post("/internal/model", json={"connection": "new", "payload": {}})
                 self.assertEqual(response.status_code, 503)
                 self.assertEqual(response.json(), {"error": "ValueError"})
+
+    async def test_search_rejects_stale_expected_revision_before_indexing(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            store = KnowledgeStore(root)
+            base = store.create({"connection": "fixture", "library": "user:0", "collection": "A", "name": "A"})
+            store.save_note(base["id"], {"body": "A synthetic sample note"})
+            app = create_worker(root, "worker-token")
+            with TestClient(app, headers={"Authorization": "Bearer worker-token"}) as client:
+                query = {"query": "note", "kb_ids": [base["id"]], "scope": "notes"}
+                with patch.object(KnowledgeService, "get_index") as index:
+                    index.return_value = None
+                    response = client.post("/internal/search", json={
+                        "connection": "", "payload": query, "expected_revisions": {base["id"]: base["revision"]},
+                    })
+                    self.assertEqual(response.status_code, 409)
+                    self.assertEqual(response.json(), {"error": "revision_conflict"})
+                    index.assert_not_called()
+                    current = store.base(base["id"])["revision"]
+                    response = client.post("/internal/search", json={
+                        "connection": "", "payload": query, "expected_revisions": {base["id"]: current},
+                    })
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.json()["revisions"], {base["id"]: current})
+                    index.assert_called_once()
 
     async def test_disconnect_cancels_model_request(self):
         with tempfile.TemporaryDirectory() as root:

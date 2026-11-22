@@ -14,7 +14,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from research_assistant.core.service_context import stored_service_context
-from research_assistant.knowledge.store import KnowledgeStore
+from research_assistant.knowledge.store import Conflict, KnowledgeStore
 from research_assistant.knowledge.service import KnowledgeService, IndexBuilding
 from research_assistant.knowledge.qa import ModelCaller
 
@@ -32,7 +32,7 @@ def create_worker(root, token):
             operation, payload = request.path_params["operation"], data["payload"]
             with stored_service_context(root, data["connection"], allow_missing=operation == "search"):
                 if operation == "search":
-                    result = await asyncio.to_thread(service.search, payload)
+                    result = await asyncio.to_thread(service.search, payload, expected_revisions=data.get("expected_revisions"))
                 elif operation == "model":
                     value, usage = await ModelCaller()(data["role"], payload, min(data.get("timeout", 45), 45))
                     result = {"value": value.model_dump() if hasattr(value, "model_dump") else value, "usage": usage}
@@ -70,6 +70,8 @@ def create_worker(root, token):
             return JSONResponse(result)
         except IndexBuilding:
             return JSONResponse({"status": "indexing", "results": [], "retry_after": 2}, status_code=202)
+        except Conflict:
+            return JSONResponse({"error": "revision_conflict"}, status_code=409)
         except Exception as exc:
             # Exceptions may contain provider URLs/credentials or private text.
             return JSONResponse({"error": type(exc).__name__}, status_code=503)

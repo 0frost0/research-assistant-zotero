@@ -11,6 +11,13 @@
 - 原生 Zotero 10.0.8 首轮能启动 Go，但连接分组尚无服务配置时，worker 在检索前拒绝请求，界面显示 `unavailable`。修复后该分组的检索使用默认配置，模型调用仍要求已选分组有配置。使用 `--native-engine` 在隔离库复验，确认同一端口提供工作台，编码服务不可用时 TF-IDF 命中 1 条笔记，按正文找回目标 revision，退出后 Go 停止。复验仅运行检索，结果保存在本地 `output/zotero/real-go-workbench-native-20261122-r2/result.json`。
 - 阅读器、研究项目网页及语义检索索引仍在 Python。此次验收覆盖知识库工作台与本地 API，生产仍使用现有配置。
 
+## 检索版本一致性
+
+- Go 在一次 SQLite 读事务中读取所选知识库的 revision，只将版本表随检索请求传给 Python worker。worker 在准备索引前核对，Go 在交付结果前再次核对 worker 返回值和当前版本。
+- 直接检索仍通过 202 提示索引准备。问答和对照在服务端轮询同一次检索时沿用最初版本。资料在这次检索中变化时返回 `revision_conflict`，网页提示刷新知识库后重试。
+- Go API 契约测试覆盖检索前、检索中和索引等待时的版本冲突。Python worker 测试核对版本不符时跳过索引，版本一致时返回匹配的 revision。Python 继续负责来源选择、索引和排序。
+- Zotero 10.0.8 隔离库通过 `--native-engine` 复验从插件启动、工作台访问、离线 TF-IDF 检索及引擎停止。自然语言问题命中 1 条笔记，按笔记正文查到目标 revision。实测使用真实库的隔离副本，未调用生成模型。
+
 ## 已验证
 
 - `backend/` 使用 `modernc.org/sqlite`，保留 Python 的知识库身份、同步指纹、不可变 revision 和备份兼容性。

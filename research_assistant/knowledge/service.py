@@ -12,7 +12,7 @@ from urllib.parse import urlencode
 from langchain_core.documents import Document
 from research_assistant.retrieval.knowledge_base import LiteratureIndex
 from research_assistant.retrieval.embeddings.api_embeddings import EmbeddingServiceUnavailable
-from research_assistant.knowledge.store import digest, text
+from research_assistant.knowledge.store import Conflict, digest, text
 
 
 def note_source(ident, revision):
@@ -159,7 +159,7 @@ class KnowledgeService:
                 }))
         return CachedIndex(self.store.home, documents, self.backend, scope) if documents else None
 
-    def search(self, data):
+    def search(self, data, *, expected_revisions=None):
         query = text(data.get("query"), "检索问题", 2000)
         scope = data.get("scope", "both")
         if scope not in {"both", "original", "notes"}:
@@ -184,6 +184,9 @@ class KnowledgeService:
                 raise ValueError("来源筛选必须是 1–4 个不同的来源标识。")
             source_ids = set(source_ids)
         snapshot = self.store.snapshot(data.get("kb_ids"))
+        revisions = {b["id"]: b["revision"] for b in snapshot["bases"]}
+        if expected_revisions is not None and revisions != expected_revisions:
+            raise Conflict("检索期间资料已更新，请重新检索。")
         sources = {}
         for entity in snapshot["entities"]:
             value = entity["data"]
@@ -322,7 +325,7 @@ class KnowledgeService:
             attach_evidence_groups(results)
         self.store.assert_current(snapshot)
         return {"query": query, "scope": scope, "backend": effective, "warning": " ".join(warnings) or None,
-                "results": results, "revisions": {b["id"]: b["revision"] for b in snapshot["bases"]}}
+                "results": results, "revisions": revisions}
 
 
 class IndexBuilding(RuntimeError):

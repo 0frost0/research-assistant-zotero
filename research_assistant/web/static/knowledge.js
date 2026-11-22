@@ -23,6 +23,9 @@ async function api(path, data, binary = false) {
     body: data === undefined ? undefined : JSON.stringify(data), cache: "no-store",
   });
   if (!response.ok) {
+    if (path === "search" && response.status === 409) {
+      throw new Error("所选知识库已更新或归档，请刷新知识库后重新检索。");
+    }
     const value = await response.json();
     throw new Error(value.error || "请求失败");
   }
@@ -148,7 +151,12 @@ $("searchForm").addEventListener("submit", async event => {
     }
     if (!result.results.length) $("results").append(node("p", "当前范围内没有匹配结果", "empty"));
     notice(result.warning);
-  } catch (error) { notice(error.message); }
+  } catch (error) {
+    if (generation !== epoch) return;
+    $("resultMeta").textContent = "";
+    $("results").replaceChildren(node("p", "检索未完成", "empty"));
+    notice(error.message);
+  }
   finally { $("searchButton").disabled = false; }
 });
 function editNote(note = null) {

@@ -4,12 +4,15 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/0frost0/research-assistant-zotero/backend/internal/inference"
 	"github.com/0frost0/research-assistant-zotero/backend/internal/store"
@@ -81,6 +84,88 @@ func TestKnowledgeWorkbenchSharesGoAPI(t *testing.T) {
 		t.Fatal("workbench export is not a readable ZIP", err)
 	}
 }
+
+func TestSearchPinsKnowledgeBaseRevisions(t *testing.T) {
+	s := testServer(t)
+	ctx := context.Background()
+	base, err := s.Store.Create(ctx, Object{"connection": "fixture", "library": "user:0", "collection": "A", "name": "A"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := store.String(base["id"])
+	worker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Payload           Object           `json:"payload"`
+			ExpectedRevisions map[string]int64 `json:"expected_revisions"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+			w.WriteHeader(500)
+			return
+		}
+		current, err := s.Store.ActiveBaseRevisions(r.Context(), []string{id})
+		if err == nil && body.Payload["query"] == "changed during indexing" && body.ExpectedRevisions[id] < current[id] {
+			jsonResponse(w, 409, Object{"error": "revision_conflict"})
+			return
+		}
+		if err != nil || len(body.ExpectedRevisions) != 1 || body.ExpectedRevisions[id] != current[id] {
+			t.Errorf("unexpected worker scope: %v, want %v (%v)", body.ExpectedRevisions, current, err)
+			w.WriteHeader(500)
+			return
+		}
+		switch body.Payload["query"] {
+		case "indexing":
+			jsonResponse(w, 202, Object{"status": "indexing", "results": []Object{}})
+			return
+		case "changed before lookup":
+			jsonResponse(w, 409, Object{"error": "revision_conflict"})
+			return
+		case "changed during lookup", "changed during indexing":
+			if _, err := s.Store.SaveNote(r.Context(), id, "", Object{"body": "New note"}); err != nil {
+				t.Error(err)
+				w.WriteHeader(500)
+				return
+			}
+			if body.Payload["query"] == "changed during indexing" {
+				jsonResponse(w, 202, Object{"status": "indexing", "results": []Object{}})
+				return
+			}
+		case "wrong worker revision":
+			current[id]++
+		}
+		jsonResponse(w, 200, Object{"revisions": current, "results": []Object{}})
+	}))
+	t.Cleanup(worker.Close)
+	s.Worker.URL = worker.URL
+	for _, tc := range []struct {
+		query string
+		ids   []string
+		want  int
+	}{
+		{"unknown library", []string{"missing"}, 404},
+		{"indexing", []string{id}, 202},
+		{"complete", []string{id, id}, 200},
+		{"changed before lookup", []string{id}, 409},
+		{"wrong worker revision", []string{id}, 409},
+		{"changed during lookup", []string{id}, 409},
+		{"complete after retry", []string{id}, 200},
+	} {
+		payload := store.Canonical(Object{"query": tc.query, "scope": "notes", "kb_ids": tc.ids})
+		w := request(s, "POST", "search", payload, "Bearer test-token", "")
+		if w.Code != tc.want {
+			t.Errorf("%s: got %d, want %d (%s)", tc.query, w.Code, tc.want, w.Body.String())
+		}
+		if tc.want == 409 && strings.Contains(w.Body.String(), `"results"`) {
+			t.Errorf("%s: conflict returned results: %s", tc.query, w.Body.String())
+		}
+	}
+	wait, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	if result, err := s.Engine.Worker.Search(wait, "fixture", Object{"query": "changed during indexing", "kb_ids": []string{id}}); !errors.Is(err, store.ErrConflict) || result != nil {
+		t.Fatalf("QA search polled across revisions: %v (%v)", result, err)
+	}
+}
+
 func TestAuthenticationAndRevisionHTTP(t *testing.T) {
 	s := testServer(t)
 	if w := request(s, "GET", "bases", "", "", ""); w.Code != 401 {

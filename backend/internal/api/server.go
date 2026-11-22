@@ -26,7 +26,7 @@ type Server struct {
 	Store       *store.Store
 	Jobs        *store.Jobs
 	Engine      *qa.Engine
-	Worker      *inference.Client
+	Worker      *inference.Retriever
 	Root, Token string
 	mu          sync.Mutex
 	tasks       map[string]context.CancelFunc
@@ -54,7 +54,8 @@ func New(root, token string, worker *inference.Client, reranker string) (*Server
 		s.DB.Close()
 		return nil, err
 	}
-	return &Server{Store: s, Jobs: jobs, Engine: &qa.Engine{Store: s, Worker: worker, Reranker: reranker}, Worker: worker, Root: root, Token: token, tasks: map[string]context.CancelFunc{}, active: map[string]bool{}, ctx: ctx, cancel: cancel, parseGate: make(chan struct{}, 1)}, nil
+	retriever := &inference.Retriever{Client: worker, Store: s}
+	return &Server{Store: s, Jobs: jobs, Engine: &qa.Engine{Store: s, Worker: retriever, Reranker: reranker}, Worker: retriever, Root: root, Token: token, tasks: map[string]context.CancelFunc{}, active: map[string]bool{}, ctx: ctx, cancel: cancel, parseGate: make(chan struct{}, 1)}, nil
 }
 func (s *Server) Close() { s.cancel(); s.wg.Wait(); s.Jobs.DB.Close(); s.Store.DB.Close() }
 func jsonResponse(w http.ResponseWriter, status int, v any) {
@@ -397,7 +398,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case "search":
 			if err = validateSearch(d); err == nil {
 				var search Object
-				search, err = s.Worker.Call(ctx, connection, "search", Object{"payload": d})
+				search, err = s.Worker.SearchOnce(ctx, connection, d)
 				if search["status"] == "indexing" {
 					status = 202
 				}

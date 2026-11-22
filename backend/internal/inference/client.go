@@ -41,6 +41,9 @@ func (c *Client) Call(ctx context.Context, connection, operation string, data st
 		return nil, e
 	}
 	defer response.Body.Close()
+	if operation == "search" && response.StatusCode == http.StatusConflict {
+		return nil, store.ErrConflict
+	}
 	if response.StatusCode != 200 && response.StatusCode != 202 {
 		return nil, fmt.Errorf("inference_http_%d", response.StatusCode)
 	}
@@ -51,22 +54,4 @@ func (c *Client) Call(ctx context.Context, connection, operation string, data st
 		return nil, e
 	}
 	return result, nil
-}
-func (c *Client) Search(ctx context.Context, connection string, payload store.Object) (store.Object, error) {
-	for {
-		result, e := c.Call(ctx, connection, "search", store.Object{"payload": payload})
-		if e != nil {
-			return nil, e
-		}
-		if result["status"] != "indexing" {
-			return result, nil
-		}
-		timer := time.NewTimer(500 * time.Millisecond)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return nil, ctx.Err()
-		case <-timer.C:
-		}
-	}
 }
