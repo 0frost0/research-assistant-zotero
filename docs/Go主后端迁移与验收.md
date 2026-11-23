@@ -58,6 +58,12 @@
 - 本轮远程编码服务连接超时。隔离配置保留生成模型，原文问答使用 `bm25-lexical-fallback`，笔记使用 `tfidf`。多文献对照经原生按钮提交并渲染，但两篇论文都未取得有效候选，返回 `degraded`，生成调用为 0。该结果覆盖降级与空证据处理，在线向量检索和本轮完整模型对照仍待验证。
 - 验收 runner 新增 `-GoExecutable`，默认使用 `output/zotero/dev/researchd.exe`，复验历史 EXE 时传入对应路径。每轮使用新的隔离目录。`-GoBackend` 在独立端口启动服务，原生插件启动与退出管理另由 `--native-engine` 覆盖。
 
+## 2026-11-23 在线补验
+
+- 核对当前服务器并恢复编码、重排隧道后，配置中的编码 API 实际返回 2048 维向量，重排请求通过模型版本和分数格式校验。复用上一轮 Go 开发构建，在新的隔离库通过 Zotero 原生工作台提交五题。
+- 四题 `answered`，无关预算题 `no_evidence`，共 10 次模型调用。原文使用 `multimodal-hybrid`，原文问答的重排记录均为 `succeeded`，笔记使用 `multimodal`。7 条引用全部匹配页面或笔记版本，五题的候选与引用均通过所选库来源及 revision 核对。本地结果在 `output/zotero/real-go-online-20261123/`。
+- 双文献对照从原生勾选和按钮提交，状态 `ok`，4 次模型调用、单轮 AI 复核、6 条比较及 2 个条件摘要，结果在界面渲染。9 段证据全部匹配原页，6 条比较均引用两篇来源。本地结果在 `output/zotero/real-go-online-comparison-20261123/`。本轮使用 `5e211b6` 源码的开发 EXE，构建记录为 `vcs.modified=true`。人工语义正确率和大库性能仍待评估。
+
 ## 明确边界
 
 - 真实库验收使用隔离的 SQLite、对象目录、Zotero profile 和回环服务；没有改写正式 Zotero 资料。
