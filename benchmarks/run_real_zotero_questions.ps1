@@ -3,6 +3,7 @@ param(
   [int]$Port = 8776,
   [int]$DebuggerPort = 2837,
   [string]$Python = "D:\miniconda3\envs\deepagents\python.exe",
+  [string]$GoExecutable = "output/zotero/dev/researchd.exe",
   [switch]$GoBackend
 )
 $ErrorActionPreference = "Stop"
@@ -22,9 +23,10 @@ try {
     if (Get-NetTCPConnection -State Listen -LocalPort $p -ErrorAction SilentlyContinue) { throw "Port $p occupied" }
   }
   if ($GoBackend) {
+    $goPath = (Resolve-Path (Join-Path $root $GoExecutable)).Path
     & $Python -c "import secrets,pathlib; pathlib.Path(r'$targetPath/worker-token').write_text(secrets.token_urlsafe(32))"
     $worker = Start-Process $Python -ArgumentList @("-X", "utf8", "-m", "research_assistant.web.inference_worker", "--root", "$Target/backend", "--token-file", "$Target/worker-token") -WorkingDirectory $root -PassThru -WindowStyle Hidden -RedirectStandardOutput "$targetPath/worker.log" -RedirectStandardError "$targetPath/worker.err.log"
-    $server = Start-Process "$root/output/zotero/researchd.exe" -ArgumentList @("-root", "$Target/backend", "-worker-token-file", "$Target/worker-token", "-listen", "127.0.0.1:$Port") -WorkingDirectory $root -PassThru -WindowStyle Hidden -RedirectStandardOutput "$targetPath/server.log" -RedirectStandardError "$targetPath/server.err.log"
+    $server = Start-Process $goPath -ArgumentList @("-root", "$Target/backend", "-worker-token-file", "$Target/worker-token", "-listen", "127.0.0.1:$Port") -WorkingDirectory $root -PassThru -WindowStyle Hidden -RedirectStandardOutput "$targetPath/server.log" -RedirectStandardError "$targetPath/server.err.log"
   } elseif (-not $nativeEngine) {
     $server = Start-Process $Python -ArgumentList @("-X", "utf8", "scripts/serve_knowledge.py", "--root", "$Target/backend", "--port", $Port) -WorkingDirectory $root -PassThru -WindowStyle Hidden -RedirectStandardOutput "$targetPath/server.log" -RedirectStandardError "$targetPath/server.err.log"
   }

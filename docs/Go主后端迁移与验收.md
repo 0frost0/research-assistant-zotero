@@ -1,6 +1,6 @@
 # Go 主后端迁移与验收
 
-更新：2026-11-22。Go 负责知识库工作台、产品 API、SQLite 数据、检索版本和来源范围、任务状态、问答编排、反馈、备份和解析队列。Python worker 提供检索索引、模型调用和 PDF/OCR/MinerU。
+更新：2026-11-23。Go 负责知识库工作台、产品 API、SQLite 数据、检索版本和来源范围、任务状态、问答编排、反馈、备份和解析队列。Python worker 提供检索索引、模型调用和 PDF/OCR/MinerU。
 
 ## Go 知识库工作台
 
@@ -44,12 +44,19 @@
   $env:PYTHON_EXECUTABLE='D:\miniconda3\envs\deepagents\python.exe'
   go test ./...
   go vet ./...
-  go build -o ../output/zotero/researchd.exe ./cmd/researchd
+  go build -o ../output/zotero/dev/researchd.exe ./cmd/researchd
   cd ..
   python benchmarks/prepare_real_zotero_run.py --target output/zotero/real-questions-go-new --connection <connection-id> --base <kb-id>
   powershell -File benchmarks/run_real_zotero_questions.ps1 `
-    -Target output/zotero/real-questions-go-new -GoBackend
+    -Target output/zotero/real-questions-go-new -GoBackend `
+    -GoExecutable output/zotero/dev/researchd.exe
   ```
+
+## 2026-11-23 降级检索与真实模型验收
+
+- 使用来源范围迁移后的 Go 构建，在 Zotero 10.0.8 隔离工作台完成五题。EHR 定义返回 `partial`，数据集、参数和个人笔记问题返回 `answered`，无关预算问题返回 `no_evidence`。共 13 次真实模型调用，6 条引用全部匹配页面或笔记 revision。结果和引用审计在本地 `output/zotero/real-go-memory-recovery-goapi-20261123/`。
+- 本轮远程编码服务连接超时。隔离配置保留生成模型，原文问答使用 `bm25-lexical-fallback`，笔记使用 `tfidf`。多文献对照经原生按钮提交并渲染，但两篇论文都未取得有效候选，返回 `degraded`，生成调用为 0。该结果覆盖降级与空证据处理，在线向量检索和本轮完整模型对照仍待验证。
+- 验收 runner 新增 `-GoExecutable`，默认使用 `output/zotero/dev/researchd.exe`，复验历史 EXE 时传入对应路径。每轮使用新的隔离目录。`-GoBackend` 在独立端口启动服务，原生插件启动与退出管理另由 `--native-engine` 覆盖。
 
 ## 明确边界
 
