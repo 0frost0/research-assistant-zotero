@@ -83,7 +83,7 @@ jobs:
         # Keep the research result provenance checked alongside product contracts.
         run: python -m unittest tests.test_public_sufficiency tests.test_sufficiency_certificate tests.test_release_archive -v
       - name: Private worker and deep MinerU cache contracts
-        run: python -m unittest tests.test_inference_worker tests.test_mineru_long_paths -v
+        run: python -m unittest tests.test_inference_worker tests.test_mineru_long_paths tests.test_search_latency_benchmark -v
       - name: Personal memory retrieval smoke evaluation
         run: |
           python benchmarks/build_personal_memory_smoke_corpus.py --root "$RUNNER_TEMP/memory-smoke"
