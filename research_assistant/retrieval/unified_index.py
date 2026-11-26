@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -65,6 +66,18 @@ class UnifiedMultimodalIndex:
         safe_base = re.sub(r"[^a-zA-Z0-9_-]+", "_", base).strip("_")
         self.collection_name = f"{safe_base}_{self.dimension}_{model_tag}"
         self.client = client or QdrantClient(url=self.qdrant_url, timeout=20)
+        self.sync_diagnostics: dict[str, object] = {
+            "status": "idle",
+            "phase": "idle",
+            "sources_total": 0,
+            "sources_completed": 0,
+            "text_chunks_total": 0,
+            "text_chunks_indexed": 0,
+            "text_chunks_skipped": 0,
+            "qdrant_reconcile_calls": 0,
+            "qdrant_retrieve_calls": 0,
+            "elapsed_ms": 0,
+        }
         self._ensure_collection()
 
     def _ensure_collection(self) -> None:
@@ -221,21 +234,68 @@ class UnifiedMultimodalIndex:
         )
 
     def sync(self, chunks: list[Document]) -> dict[str, int]:
+        started = time.monotonic()
+        self.sync_diagnostics = {
+            "status": "indexing",
+            "phase": "grouping",
+            "sources_total": 0,
+            "sources_completed": 0,
+            "text_chunks_total": len(chunks),
+            "text_chunks_indexed": 0,
+            "text_chunks_skipped": 0,
+            "qdrant_reconcile_calls": 0,
+            "qdrant_retrieve_calls": 0,
+            "elapsed_ms": 0,
+        }
+        try:
+            result = self._sync_impl(chunks)
+        except Exception as exc:
+            self.sync_diagnostics.update({
+                "status": "failed",
+                "phase": "failed",
+                "error_type": type(exc).__name__,
+                "elapsed_ms": int((time.monotonic() - started) * 1000),
+            })
+            raise
+        self.sync_diagnostics.update({
+            "status": "ready",
+            "phase": "complete",
+            "elapsed_ms": int((time.monotonic() - started) * 1000),
+        })
+        return result
+
+    def _sync_impl(self, chunks: list[Document]) -> dict[str, int]:
         grouped: dict[str, list[tuple[int, Document]]] = {}
         for index, chunk in enumerate(chunks):
             grouped.setdefault(str(chunk.metadata["source"]), []).append((index, chunk))
 
         text_index_name = f"{self.collection_name}:text"
+        self.sync_diagnostics["phase"] = "text"
+        self.sync_diagnostics["sources_total"] = len(grouped)
         text_indexed = 0
         text_skipped = 0
+        needs_text_reconcile = False
+        expected_text_ids: set[str] = set()
+        prepared_text: list[tuple[str, str, str, list[EvidenceRecord], bool, bool]] = []
+        candidate_text_ids: list[str] = []
         for source, indexed_chunks in grouped.items():
             document_id, version, records = self._text_records(source, indexed_chunks)
+            expected_text_ids.update(item.evidence_id for item in records)
             evidence_current = self.store.is_active_version(source, version)
-            index_current = self.store.is_index_current(
+            index_state_current = self.store.is_index_current(
                 text_index_name, source, version, len(records)
             )
-            if index_current:
-                index_current = self._contains_points([item.evidence_id for item in records])
+            prepared_text.append((source, document_id, version, records, evidence_current, index_state_current))
+            if index_state_current:
+                candidate_text_ids.extend(item.evidence_id for item in records)
+
+        existing_text_ids = self._existing_points(candidate_text_ids)
+        for source, document_id, version, records, evidence_current, index_state_current in prepared_text:
+            index_current = index_state_current and all(
+                item.evidence_id in existing_text_ids for item in records
+            )
+            if not index_current:
+                needs_text_reconcile = True
             if not evidence_current:
                 self.store.stage(records)
             if not index_current:
@@ -249,24 +309,32 @@ class UnifiedMultimodalIndex:
                     ]
                 )
                 text_indexed += len(records)
+                self.sync_diagnostics["text_chunks_indexed"] = text_indexed
             else:
                 text_skipped += len(records)
+                self.sync_diagnostics["text_chunks_skipped"] = text_skipped
             if not evidence_current:
                 self.store.activate(document_id, version)
-            self._delete_stale_source(
-                source,
-                "text",
-                {item.evidence_id for item in records},
-            )
             self.store.mark_index_current(
                 text_index_name, source, version, len(records)
             )
+            self.sync_diagnostics["sources_completed"] = int(self.sync_diagnostics["sources_completed"]) + 1
 
+        # Reconcile all text points in one pass.  Per-source scrolls multiply
+        # Qdrant round trips on large Zotero libraries and are unnecessary once
+        # the complete expected ID set is known.
         current_sources = set(grouped)
+        missing_text_sources = self.store.indexed_sources(text_index_name) - current_sources
+        if needs_text_reconcile or missing_text_sources:
+            self.sync_diagnostics["phase"] = "text-reconcile"
+            self._reconcile_modality(expected_text_ids, "text")
+        else:
+            self.sync_diagnostics["phase"] = "text-reconcile-skipped"
         self.store.deactivate_missing_sources(current_sources)
         self._delete_missing_sources(text_index_name, current_sources, "text")
         self.store.purge_inactive()
 
+        self.sync_diagnostics["phase"] = "images"
         visual_records = [
             self._visual_record(item) for item in self.store.active_image_candidates()
         ]
@@ -323,6 +391,8 @@ class UnifiedMultimodalIndex:
             )
         self._delete_missing_sources(image_index_name, set(visual_grouped), "image")
         self.store.purge_inactive_visual()
+        self.sync_diagnostics["text_chunks_indexed"] = text_indexed
+        self.sync_diagnostics["text_chunks_skipped"] = text_skipped
         return {
             "text_indexed": text_indexed,
             "text_skipped": text_skipped,
@@ -332,13 +402,44 @@ class UnifiedMultimodalIndex:
 
     def _contains_points(self, point_ids: list[str]) -> bool:
         # SQLite is not proof that a Qdrant backup/restore still has the vectors.
+        return len(self._existing_points(point_ids)) == len(set(point_ids))
+
+    def _existing_points(self, point_ids: list[str]) -> set[str]:
+        """Retrieve point IDs in bounded batches and return the IDs Qdrant has."""
+        existing: set[str] = set()
         for start in range(0, len(point_ids), 256):
             expected = set(point_ids[start:start + 256])
+            self.sync_diagnostics["qdrant_retrieve_calls"] = int(self.sync_diagnostics.get("qdrant_retrieve_calls", 0)) + 1
             points = self.client.retrieve(self.collection_name, ids=list(expected),
                                           with_payload=False, with_vectors=False)
-            if {str(point.id) for point in points} != expected:
-                return False
-        return True
+            existing.update(str(point.id) for point in points)
+        return existing
+
+    def _reconcile_modality(self, expected_ids: set[str], modality: str) -> None:
+        stored_ids: set[str] = set()
+        offset = None
+        while True:
+            self.sync_diagnostics["qdrant_reconcile_calls"] = int(self.sync_diagnostics.get("qdrant_reconcile_calls", 0)) + 1
+            points, offset = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=models.Filter(must=[models.FieldCondition(
+                    key="modality", match=models.MatchValue(value=modality)
+                )]),
+                limit=256,
+                offset=offset,
+                with_payload=False,
+                with_vectors=False,
+            )
+            stored_ids.update(str(point.id) for point in points)
+            if offset is None:
+                break
+        stale = sorted(stored_ids - expected_ids)
+        if stale:
+            self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=models.PointIdsList(points=stale),
+                wait=True,
+            )
 
     def _filter(self, source: str, modality: str) -> models.Filter:
         return models.Filter(

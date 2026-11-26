@@ -38,6 +38,32 @@ def zotero_url(library, item_key, page=None):
     return url + "?" + urlencode({"page": page or 1})
 
 
+def public_index_diagnostics(index):
+    """Expose bounded sync state without paths, endpoints, or exception text."""
+    raw = getattr(index, "unified_diagnostics", None)
+    if not isinstance(raw, dict):
+        return None
+    allowed = {
+        "status", "phase", "sources_total", "sources_completed",
+        "text_chunks_total", "text_chunks_indexed", "text_chunks_skipped",
+        "qdrant_reconcile_calls", "qdrant_retrieve_calls", "elapsed_ms",
+        "error_type",
+    }
+    result = {}
+    for key in allowed:
+        value = raw.get(key)
+        if key == "error_type":
+            if isinstance(value, str) and value.isidentifier() and len(value) <= 80:
+                result[key] = value
+        elif isinstance(value, bool):
+            continue
+        elif isinstance(value, int) and value >= 0:
+            result[key] = value
+        elif key in {"status", "phase"} and isinstance(value, str) and len(value) <= 32:
+            result[key] = value
+    return result or None
+
+
 class CachedIndex(LiteratureIndex):
     def __init__(self, home, documents, backend, scope="all"):
         self.documents = documents
@@ -241,11 +267,13 @@ class KnowledgeService:
                          e["data"].get("extraction", {}).get("low_text_pages", 0) for e in snapshot["entities"])
         warnings = ["部分 PDF 页面缺少足够文字；此版本未执行 OCR，检索覆盖不完整。"] if unreadable else []
         results, effective = [], self.backend
+        index_diagnostics = None
         if sources:
             # Serialize rebuild/query so a simultaneous sync cannot swap the shared index.
             with self.lock:
                 index = self.get_index(set(sources), background=True)
                 if index is not None:
+                    index_diagnostics = public_index_diagnostics(index)
                     identifier_only = False
                     lexical = index if index.backend == "tfidf" or index.unified_error else None
                     try:
@@ -339,7 +367,8 @@ class KnowledgeService:
             attach_evidence_groups(results)
         self.store.assert_current(snapshot)
         return {"query": query, "scope": scope, "backend": effective, "warning": " ".join(warnings) or None,
-                "results": results, "revisions": revisions}
+                "results": results, "revisions": revisions,
+                "index_diagnostics": index_diagnostics}
 
 
 class IndexBuilding(RuntimeError):

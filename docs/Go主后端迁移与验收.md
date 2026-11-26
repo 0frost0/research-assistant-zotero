@@ -126,4 +126,17 @@ Python 启动器先在随机回环端口启动私有推理服务，再拉起 Go 
 - 解析故障依据：同一图片路径长289字符，普通 `Path.is_file()` 为 false，Win32 `\\?\` 前缀访问为 true；MinerU 已生成文件，读取阶段误判缺失。现对 Windows 缓存目录/图片统一扩展路径，同时保留 resolve 后的目录包含校验；新测试用真实深目录验证可读并拒绝目录外图片，连同现有缓存测试4项通过。该 Python 修复晚于 `6929f3b` release tag。
 - Python core/worker/长路径回归共30项完成（1项依赖条件跳过）；CI 增加 worker 和深缓存路径契约。此处不将 Linux CI 当作 Windows 长路径实机验证。
 - 第四轮 `real-workflow-go-release-20261119-r4` 已通过：干净 `6929f3b` Go EXE + 修复后 Python worker，真实PDF上传1次、同步2项、笔记v1/v2历史渲染成功，单个 MinerU 任务 `succeeded`、`cached=false`。未调用问答模型；解析使用真实 MinerU。此前失败缓存也已只读恢复为116块、11张图片。未将私有文献、数据库或个人记录上传。
-- 验收提交 `43f92cb` 推送两次遇到 GitHub 443 TCP 超时；DNS 能解析但连通性检查失败，稍后正常重试成功，未修改网络/代理全局配置。
+- 验收提交 `43f92cb` 推送两次遇到 GitHub 443 TCP 超时；DNS 能解析但连通性检查失败，稍后正常重试成功，未修改网络/代理全局配置。## 2026-11-26 Text index diagnostics and large-library recheck
+
+- UnifiedMultimodalIndex.sync() now gathers all expected text point IDs and performs one global stale-point reconcile when required. Image cleanup keeps its existing per-source path. A restart with unchanged sources and complete points skips the text collection scroll.
+- In-memory diagnostics record phase, source and chunk counts, elapsed time, Qdrant retrieve/reconcile calls, status, and exception type. The knowledge API exposes only these bounded fields; it does not expose paths, endpoints, tokens, or exception text. The latency benchmark records index_diagnostics so index preparation can be separated from query latency.
+- On the same isolated copy (2 knowledge bases, 154 deduplicated PDFs, 31,207 text chunks), the historical cold first request was 28,243 ms. The first global-reconcile version measured 24,245 ms; skipping unchanged reconciles measured 20,864 ms; batched text existence checks measured 19,227 ms. Each cold phase has one sample, so these are diagnostic observations, not concurrency or semantic-accuracy claims.
+- The latest five queries returned multimodal-hybrid; hot queries were 247--432 ms. UTF-8 roundtrip, source scope, and revision audits passed. Diagnostics showed 153 sources, 31,207 chunks, 122 retrieve calls, and zero reconcile calls, confirming that the unchanged restart path did not scan the full text collection.
+- Failure boundaries remain explicit: missing Qdrant points trigger re-indexing; source replacement or deletion triggers cleanup; image/text shared-collection behavior is unchanged. No refusal threshold, training label, or production deployment was added.
+
+Reproduce with a fresh output filename:
+
+    python scripts/start_go_engine.py --root <isolated-dir>/backend --port 8790
+    python benchmarks/benchmark_zotero_search_latency.py --target <isolated-dir> --all-bases --repeats 1 --output-name search-latency-after-reconcile.json
+
+Detailed local evidence is in output/task-reports/2026-11-26-index-reconcile-diagnostics.md; isolated receipts are search-latency-after-reconcile-r4.json and search-latency-after-reconcile-r5.json.

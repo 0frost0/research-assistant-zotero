@@ -93,6 +93,7 @@ def request_search(endpoint, headers, payload, *, opener, revisions, sources,
                 "backend": body.get("backend"),
                 "hybrid_succeeded": body.get("backend") == "multimodal-hybrid",
                 "warning": bool(body.get("warning")),
+                "index_diagnostics": body.get("index_diagnostics"),
                 "query_scope_revision_audit": "passed",
             }
         time.sleep(poll_seconds)

@@ -105,6 +105,7 @@ class LiteratureIndex:
         self.persistent_error: str | None = None
         self.unified_index = None
         self.unified_error: str | None = None
+        self.unified_diagnostics: dict[str, object] | None = None
         self.lexical_index = None
 
         if backend in {"tfidf", "hybrid"}:
@@ -173,8 +174,21 @@ class LiteratureIndex:
                 )
                 unified_index.sync(self.chunks)
                 self.unified_index = unified_index
+                self.unified_diagnostics = dict(unified_index.sync_diagnostics)
             except Exception as exc:
                 self.unified_error = f"{type(exc).__name__}: {exc}"
+                if "unified_index" in locals():
+                    self.unified_diagnostics = dict(getattr(unified_index, "sync_diagnostics", {}))
+                else:
+                    self.unified_diagnostics = {
+                        "status": "failed",
+                        "phase": "initialization",
+                        "error_type": type(exc).__name__,
+                    }
+                self.unified_diagnostics.update({
+                    "status": "failed",
+                    "error_type": type(exc).__name__,
+                })
                 self.vectorizer = TfidfVectorizer(
                     analyzer="char",
                     ngram_range=(2, 4),
