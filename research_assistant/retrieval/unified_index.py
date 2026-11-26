@@ -66,6 +66,13 @@ class UnifiedMultimodalIndex:
         safe_base = re.sub(r"[^a-zA-Z0-9_-]+", "_", base).strip("_")
         self.collection_name = f"{safe_base}_{self.dimension}_{model_tag}"
         self.client = client or QdrantClient(url=self.qdrant_url, timeout=20)
+        try:
+            configured_retrieve_batch = int(
+                os.getenv("RESEARCH_ASSISTANT_QDRANT_RETRIEVE_BATCH_SIZE", "1024")
+            )
+        except ValueError:
+            configured_retrieve_batch = 1024
+        self.retrieve_batch_size = max(256, min(1024, configured_retrieve_batch))
         self.sync_diagnostics: dict[str, object] = {
             "status": "idle",
             "phase": "idle",
@@ -76,6 +83,7 @@ class UnifiedMultimodalIndex:
             "text_chunks_skipped": 0,
             "qdrant_reconcile_calls": 0,
             "qdrant_retrieve_calls": 0,
+            "qdrant_retrieve_batch_size": self.retrieve_batch_size,
             "elapsed_ms": 0,
         }
         self._ensure_collection()
@@ -245,6 +253,7 @@ class UnifiedMultimodalIndex:
             "text_chunks_skipped": 0,
             "qdrant_reconcile_calls": 0,
             "qdrant_retrieve_calls": 0,
+            "qdrant_retrieve_batch_size": self.retrieve_batch_size,
             "elapsed_ms": 0,
         }
         try:
@@ -407,8 +416,8 @@ class UnifiedMultimodalIndex:
     def _existing_points(self, point_ids: list[str]) -> set[str]:
         """Retrieve point IDs in bounded batches and return the IDs Qdrant has."""
         existing: set[str] = set()
-        for start in range(0, len(point_ids), 256):
-            expected = set(point_ids[start:start + 256])
+        for start in range(0, len(point_ids), self.retrieve_batch_size):
+            expected = set(point_ids[start:start + self.retrieve_batch_size])
             self.sync_diagnostics["qdrant_retrieve_calls"] = int(self.sync_diagnostics.get("qdrant_retrieve_calls", 0)) + 1
             points = self.client.retrieve(self.collection_name, ids=list(expected),
                                           with_payload=False, with_vectors=False)

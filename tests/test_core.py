@@ -269,6 +269,7 @@ class PersistentTextIndexTests(unittest.TestCase):
             self.assertEqual(index.sync_diagnostics["status"], "ready")
             self.assertEqual(index.sync_diagnostics["text_chunks_total"], 1)
             self.assertEqual(index.sync_diagnostics["text_chunks_skipped"], 1)
+            self.assertEqual(index.sync_diagnostics["qdrant_retrieve_batch_size"], 1024)
             self.assertEqual(index.sync_diagnostics["qdrant_reconcile_calls"], 0)
             self.assertEqual(embeddings.text_calls, 1)
             self.assertEqual(embeddings.image_calls, 1)

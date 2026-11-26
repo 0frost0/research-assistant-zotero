@@ -46,7 +46,8 @@ def public_index_diagnostics(index):
     allowed = {
         "status", "phase", "sources_total", "sources_completed",
         "text_chunks_total", "text_chunks_indexed", "text_chunks_skipped",
-        "qdrant_reconcile_calls", "qdrant_retrieve_calls", "elapsed_ms",
+        "qdrant_reconcile_calls", "qdrant_retrieve_calls",
+        "qdrant_retrieve_batch_size", "elapsed_ms",
         "error_type",
     }
     result = {}
